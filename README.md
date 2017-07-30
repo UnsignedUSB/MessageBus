@@ -24,29 +24,33 @@ How to use MessageBus
 ----------
 1. Define messages : 
    ```java
-   public static final int MESSAGE_MESSAGE_TEXT_UI_THREAD = 0x00000001;
-   public static final int MESSAGE_MESSAGE_TEXT_WORKER_THREAD = 0x00000002;
+   public static final int MESSAGE_TEXT_UI_THREAD = 0x00000001;
+   public static final int MESSAGE_TEXT_WORKER_THREAD = 0x00000002;
    ```
-2. Prepare & Register subscriber :
-1) Register
+2. Register subscriber :
    ```java
    public SampleFragment2() {
        MessageBus.getInstance().register(this);
    }
    ```
-2) Prepare
+3. Prepare subscriber methods :
    ```java
-   @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_UI_THREAD)
+   @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD)
    public void onMessageChanged_UIThread(String message) {
        textView.append(message+"\n");
    }
 
-   @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
+   @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
    public void onMessageChanged_WorkerThread(String message) {
        textView.append(message+"\n");
    }
    ```
-3) Unregister
+4. Send Message :
+   ```java
+   MessageBus.getInstance().handle(MESSAGE_TEXT_UI_THREAD, null);
+   MessageBus.getInstance().handle(MESSAGE_TEXT_UI_THREAD, text);
+   ```
+5. Unregister subscriber :
    ```java
    @Override
    public void onDestroy() {
@@ -54,3 +58,6 @@ How to use MessageBus
        MessageBus.getInstance().unregister(this);
    }
    ```
+License
+------------
+MessageBus binaries and source code can be used according to the [Apache License, Version 2.0](LICENSE).
