@@ -5,7 +5,7 @@ MessageBus is an Android library that helps you send and receive messages betwee
 - MessageBus's inteface is looks like [EventBus](https://github.com/greenrobot/EventBus).</br>
 But MessageBus uses integer Message.</br>So, it can be used more lightly than EventBus.
 
-#### Ready to use MessageBus
+Ready to use MessageBus
 ----------
 Use jcenter</br>
    ```
@@ -19,7 +19,8 @@ Via Gradle :</br>
    ```
    compile 'com.github.UnsignedUSB:MessageBus:0.7.5'
    ```
-#### How to use MessageBus
+
+How to use MessageBus
 ----------
 1. Define messages : 
    ```java
@@ -43,5 +44,13 @@ Via Gradle :</br>
    @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
    public void onMessageChanged_WorkerThread(String message) {
        textView.append(message+"\n");
+   }
+   ```
+3) Unregister
+   ```java
+   @Override
+   public void onDestroy() {
+       super.onDestroy();
+       MessageBus.getInstance().unregister(this);
    }
    ```
