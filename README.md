@@ -7,7 +7,7 @@ But MessageBus uses integer Message.</br>So, it can be used more lightly than Ev
 
 Ready to use MessageBus
 ----------
-Use jcenter</br>Write following code in Project build.gradle
+Write following code in your project build.gradle.
    ```
    buildscript {
        repositories {
@@ -21,7 +21,7 @@ Use jcenter</br>Write following code in Project build.gradle
        }
    }
    ```
-Via Gradle :</br>
+Write following code in your app build.gradle.
    ```
    compile 'com.github.UnsignedUSB:MessageBus:0.7.5'
    ```
