@@ -7,9 +7,15 @@ But MessageBus uses integer Message.</br>So, it can be used more lightly than Ev
 
 Ready to use MessageBus
 ----------
-Use jcenter</br>
+Use jcenter</br>Write following code in Project build.gradle
    ```
    buildscript {
+       repositories {
+           jcenter()
+       }
+   }
+   ...  
+   allprojects {
        repositories {
            jcenter()
        }
