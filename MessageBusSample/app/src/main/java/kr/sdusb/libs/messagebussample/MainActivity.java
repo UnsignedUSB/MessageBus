@@ -16,7 +16,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
     }
 
-    @Subscribe(events = {SampleFragment1.MESSAGE_MESSAGE_TEXT_WORKER_THREAD, SampleFragment1.MESSAGE_MESSAGE_TEXT_UI_THREAD}, thread = Subscribe.Thread.MAIN)
+    @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, SampleFragment1.MESSAGE_TEXT_UI_THREAD}, thread = Subscribe.Thread.MAIN)
     public void onMessageReceived() {
         Toast.makeText(this, "Message Received", Toast.LENGTH_SHORT).show();
     }

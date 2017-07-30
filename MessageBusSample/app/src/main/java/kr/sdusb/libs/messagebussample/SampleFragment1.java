@@ -17,8 +17,8 @@ import kr.sdusb.libs.messagebus.MessageBus;
  */
 public class SampleFragment1 extends Fragment {
 
-    public static final int MESSAGE_MESSAGE_TEXT_UI_THREAD = 0x00000001;
-    public static final int MESSAGE_MESSAGE_TEXT_WORKER_THREAD = 0x00000002;
+    public static final int MESSAGE_TEXT_UI_THREAD = 0x00000001;
+    public static final int MESSAGE_TEXT_WORKER_THREAD = 0x00000002;
 
     private EditText editText;
     private Button mainThreadButton;
@@ -50,15 +50,19 @@ public class SampleFragment1 extends Fragment {
     private View.OnClickListener onClickListener = new View.OnClickListener() {
         @Override
         public void onClick(View view) {
+            if(editText.getText() == null) {
+                return;
+            }
             switch (view.getId()) {
                 case R.id.button:
-                    MessageBus.getInstance().handle(MESSAGE_MESSAGE_TEXT_UI_THREAD, editText.getText().toString());
+                    String text = editText.getText().toString();
+                    MessageBus.getInstance().handle(MESSAGE_TEXT_UI_THREAD, text);
                     break;
                 case R.id.button2:
                     new Thread() {
                         @Override
                         public void run() {
-                            MessageBus.getInstance().handle(MESSAGE_MESSAGE_TEXT_WORKER_THREAD, editText.getText().toString());
+                            MessageBus.getInstance().handle(MESSAGE_TEXT_WORKER_THREAD, editText.getText().toString());
                         }
                     }.start();
                     break;

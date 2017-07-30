@@ -12,7 +12,7 @@ import kr.sdusb.libs.messagebus.MessageBus;
 import kr.sdusb.libs.messagebus.Subscribe;
 
 /**
- * 
+ *
  * Created by Yoosub-Song on 2017-07-30 오후 2:43.
  */
 public class SampleFragment2 extends Fragment {
@@ -22,6 +22,12 @@ public class SampleFragment2 extends Fragment {
     public SampleFragment2() {
         MessageBus.getInstance().register(this);
     }
+
+@Override
+public void onDestroy() {
+    super.onDestroy();
+    MessageBus.getInstance().unregister(this);
+}
 
     @Nullable
     @Override
@@ -36,12 +42,12 @@ public class SampleFragment2 extends Fragment {
         textView = getView().findViewById(R.id.textView);
     }
 
-    @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_UI_THREAD)
+    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD)
     public void onMessageChanged_UIThread(String message) {
         textView.append(message+"\n");
     }
 
-    @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
+    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
     public void onMessageChanged_WorkerThread(String message) {
         textView.append(message+"\n");
     }
