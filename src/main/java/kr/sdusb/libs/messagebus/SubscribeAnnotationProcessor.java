@@ -285,7 +285,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 sb.append("\tprivate void ").append(getEventHandlerMethodName(methodInfo, event));
 
                 if(methodInfo.hasMessageParam) {
-                    sb.append("(").append(methodInfo.paramClassNameWithPackage).append(" data) {\n");
+                    sb.append("(");
+                    if(methodInfo.runOnMainThread) {
+                        sb.append("final ");
+                    }
+                    sb.append(methodInfo.paramClassNameWithPackage).append(" data) {\n");
                 } else {
                     sb.append("() {\n");
                 }
