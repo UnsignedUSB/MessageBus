@@ -1,0 +1,22 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+mainClassName = 'SubscribeAnnotationProcessor'
+sourceCompatibility = "1.7"
+targetCompatibility = "1.7"
+version = '1.0'
+
+jar {
+    manifest {
+        attributes 'Title': 'MessageBus', 'Version': version, 'Main-Class': mainClassName
+    }
+    archiveName 'MessageBus.jar'
+    dependsOn configurations.runtime
+    from {
+        configurations.compile.collect {it.isDirectory()? it: zipTree(it)}
+    }
+}
