@@ -7,10 +7,38 @@ But MessageBus uses integer Message.</br>So, it can be used more lightly than Ev
 
 ## How to use MessageBus
 Use jcenter</br>
-<pre><code>buildscript {
-    repositories {
-        jcenter()
-    }
-}</code></pre>
-Via Gradle:</br>
-<pre><code>compile 'com.github.UnsignedUSB:MessageBus:0.7.5'</code></pre>
+   ```
+   buildscript {
+       repositories {
+           jcenter()
+       }
+   }
+   ```
+Via Gradle :</br>
+   ```
+   compile 'com.github.UnsignedUSB:MessageBus:0.7.5'
+   ```
+1. Define messages : 
+   ```java
+   public static final int MESSAGE_MESSAGE_TEXT_UI_THREAD = 0x00000001;
+   public static final int MESSAGE_MESSAGE_TEXT_WORKER_THREAD = 0x00000002;
+   ```
+2. Prepare & Register subscriber :
+1) Register
+   ```java
+   public SampleFragment2() {
+       MessageBus.getInstance().register(this);
+   }
+   ```
+2) Prepare
+   ```java
+   @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_UI_THREAD)
+   public void onMessageChanged_UIThread(String message) {
+       textView.append(message+"\n");
+   }
+
+   @Subscribe(events = SampleFragment1.MESSAGE_MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
+   public void onMessageChanged_WorkerThread(String message) {
+       textView.append(message+"\n");
+   }
+   ```
