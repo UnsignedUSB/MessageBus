@@ -37,12 +37,12 @@ How to use MessageBus
    ```java
    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD)
    public void onMessageChanged_UIThread(String message) {
-       textView.append(message+"\n");
+       // Do Something
    }
 
    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
    public void onMessageChanged_WorkerThread(String message) {
-       textView.append(message+"\n");
+       // Do Something
    }
    ```
 4. Send Message :
@@ -54,7 +54,7 @@ How to use MessageBus
    ```java
    @Override
    public void onDestroy() {
-       super.onDestroy();
+       ...
        MessageBus.getInstance().unregister(this);
    }
    ```
