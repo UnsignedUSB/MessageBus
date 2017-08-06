@@ -1,22 +1,24 @@
-apply plugin: 'java'
-apply plugin: 'application'
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
 
-dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:2.3.3'
+        classpath 'com.neenbedankt.gradle.plugins:android-apt:1.8'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
 }
 
-mainClassName = 'SubscribeAnnotationProcessor'
-sourceCompatibility = "1.7"
-targetCompatibility = "1.7"
-version = '1.0'
+allprojects {
+    repositories {
+        jcenter()
+    }
+}
 
-jar {
-    manifest {
-        attributes 'Title': 'MessageBus', 'Version': version, 'Main-Class': mainClassName
-    }
-    archiveName 'MessageBus.jar'
-    dependsOn configurations.runtime
-    from {
-        configurations.compile.collect {it.isDirectory()? it: zipTree(it)}
-    }
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }
