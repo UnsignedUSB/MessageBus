@@ -5,11 +5,7 @@ package kr.sdusb.libs.messagebus;
  * Created by Yoosub-Song on 2017-06-23 PM 1:46.
  */
 public @interface Subscribe {
-    @Thread int thread() default Thread.CURRENT;
+    @ThreadType int thread() default ThreadType.CURRENT;
     int[] events();
-
-    @interface Thread{
-        int MAIN = 0;
-        int CURRENT = 1;
-    }
+    int priority() default Integer.MAX_VALUE;
 }

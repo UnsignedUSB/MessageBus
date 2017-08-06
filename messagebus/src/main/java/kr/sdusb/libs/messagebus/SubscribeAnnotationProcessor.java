@@ -109,8 +109,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 boolean hasMessageParam = hasMessageParam(element);
                 int thread = annotation.thread();
                 int[] events = annotation.events();
+                int priority = annotation.priority();
 
-                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread == Subscribe.Thread.MAIN, throwns, superClasses);
+                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread == ThreadType.MAIN, throwns, superClasses);
+                methodInfo.setPriority(priority);
                 if(classInfos.contains(methodInfo.classInfo) == false) {
                     classInfos.add(methodInfo.classInfo);
                 }
@@ -130,8 +132,15 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             }
         }
 
-
         sortClassInfosList();
+        sortMethodInfoList();
+    }
+
+    private void sortMethodInfoList() {
+        for(int event:map.keySet()) {
+            List<MethodInfo> list = map.get(event);
+            Collections.sort(list);
+        }
     }
 
     private void sortClassInfosList() {
@@ -403,7 +412,8 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
     }
 
-    private class MethodInfo {
+    private class MethodInfo implements Comparable<MethodInfo>{
+        public int priority = Integer.MAX_VALUE;
         public final ClassInfo classInfo;
         public final String methodName;
         public final String paramClassNameWithPackage;
@@ -422,6 +432,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             this.values = values;
         }
 
+        private void setPriority(int priority) {
+            this.priority = priority;
+        }
+
         @Override
         public boolean equals(Object o) {
             if(o instanceof MethodInfo) {
@@ -429,6 +443,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 return mi.classInfo.equals(classInfo) && mi.methodName.equals(methodName);
             }
             return false;
+        }
+
+        @Override
+        public int compareTo(MethodInfo methodInfo) {
+            return priority - methodInfo.priority;
         }
     }
 }

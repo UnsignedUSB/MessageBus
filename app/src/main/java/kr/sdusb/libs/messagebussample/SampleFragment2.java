@@ -10,6 +10,7 @@ import android.widget.TextView;
 
 import kr.sdusb.libs.messagebus.MessageBus;
 import kr.sdusb.libs.messagebus.Subscribe;
+import kr.sdusb.libs.messagebus.ThreadType;
 
 /**
  *
@@ -42,12 +43,12 @@ public void onDestroy() {
         textView = getView().findViewById(R.id.textView);
     }
 
-    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD)
+    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD, priority = 1)
     public void onMessageChanged_UIThread(String message) {
         textView.append(message+"\n");
     }
 
-    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = Subscribe.Thread.MAIN)
+    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = ThreadType.MAIN)
     public void onMessageChanged_WorkerThread(String message) {
         textView.append(message+"\n");
     }
