@@ -23,7 +23,7 @@ Write following code in your project build.gradle.
    ```
 Write following code in your app build.gradle.
    ```
-   compile 'com.github.UnsignedUSB:MessageBus:0.7.5'
+   compile 'com.github.UnsignedUSB:MessageBus:0.8.0'
    ```
 
 How to use MessageBus
