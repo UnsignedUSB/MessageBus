@@ -1,5 +1,8 @@
 package kr.sdusb.libs.messagebus;
 
+
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -57,9 +60,53 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             // that occur from the file already existing after its first run, this is normal
         }
 
-
+        writeMessageBoard();
         return true;
     }
+
+    private void writeMessageBoard() {
+        try{
+            List<Integer> eventsList = new ArrayList<Integer>();
+            eventsList.addAll(map.keySet());
+            Collections.sort(eventsList);
+
+            BufferedWriter out = new BufferedWriter(new FileWriter("MessageBoard.csv"));
+//            String s = "File Text";
+//
+//            out.write(s);
+//            out.newLine();
+//            out.write(s);
+//            out.newLine();
+
+            for(int event : eventsList) {
+                out.write(Integer.toHexString(event));
+                out.newLine();
+
+                List<MethodInfo> methodInfoList = map.get(event);
+                for(MethodInfo mi : methodInfoList) {
+                    out.write(",");
+                    if(mi.classInfo != null && mi.classInfo.classNameWithPackage != null) {
+                        out.write("\""+mi.classInfo.className +"\n"+mi.classInfo.classNameWithPackage+"\"");
+                    }
+                    out.write(",");
+                    out.write(mi.methodName);
+                    out.write(",");
+                    if(mi.paramClassNameWithPackage != null) {
+                        String name = mi.paramClassNameWithPackage.substring(mi.paramClassNameWithPackage.lastIndexOf(".")+1);
+                        out.write("\""+name +"\n"+mi.paramClassNameWithPackage+"\"");
+                    }
+
+                    out.newLine();
+                }
+                out.newLine();
+            }
+
+            out.close();
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private boolean hasMessageParam(Element element) {
         ExecutableElement methodElement = (ExecutableElement) element;
