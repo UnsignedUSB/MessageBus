@@ -395,16 +395,6 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                         }
                     }
 
-//                    if(methodInfo.classInfo.hasManyInstance) {
-//                        sb.append("\t\t\tfor(").append(methodInfo.classInfo.className).append(" a:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-//                                .append("\t\t\t\ta.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-//                                .append("\t\t\t}\n");
-//                    } else {
-//                        sb.append("\t\t\tif(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-//                                .append("\t\t\t\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-//                                .append("\t\t\t}\n");
-//                    }
-
 
                     sb.append("\t\t} else {\n")
                             .append("\t\t\thandler.post(new Runnable(){\n\t\t\t\t@Override public void run() {\n");
@@ -439,16 +429,25 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                             .append("\t\t}\n")
                             .append("\t}\n\n");
                 } else {
-                    sb.append("\t\tif(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n");
 
-                    String defaultTabs = "\t\t\t";
+
+                    String defaultTabs = "\t\t";
                     if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
                         sb.append(defaultTabs).append("try{\n");
                         defaultTabs += "\t";
                     }
-                    sb.append(defaultTabs).append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n");
 
-                    defaultTabs = "\t\t\t";
+                    if(methodInfo.classInfo.hasManyInstance) {
+                        sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" a:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                                .append(defaultTabs).append("\ta.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                                .append(defaultTabs).append("}\n");
+                    } else {
+                        sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                                .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                                .append(defaultTabs).append("}\n");
+                    }
+
+                    defaultTabs = "\t\t";
                     if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
                         sb.append(defaultTabs).append("}\n");
                         int count = 0;
@@ -457,8 +456,26 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                             count++;
                         }
                     }
-                    sb.append("\t\t}\n")
-                            .append("\t}\n\n");
+//                    sb.append("\t\tif(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n");
+//
+//                    String defaultTabs = "\t\t\t";
+//                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+//                        sb.append(defaultTabs).append("try{\n");
+//                        defaultTabs += "\t";
+//                    }
+//                    sb.append(defaultTabs).append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n");
+//
+//                    defaultTabs = "\t\t\t";
+//                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+//                        sb.append(defaultTabs).append("}\n");
+//                        int count = 0;
+//                        for(String throwString : methodInfo.throwns) {
+//                            sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
+//                            count++;
+//                        }
+//                    }
+//                    sb.append("\t\t}\n")
+                    sb.append("\t}\n\n");
                 }
             }
         }

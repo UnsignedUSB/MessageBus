@@ -10,3 +10,4 @@ app/libs/MessageBus.jar
 messagebus/target/
 messagebus/pom.xml.bak
 MessageBoard.csv
+messagebus/deploy.bat
