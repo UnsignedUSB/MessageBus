@@ -8,6 +8,7 @@ import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -24,15 +25,16 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.JavaFileObject;
 
-@SupportedAnnotationTypes({"kr.sdusb.libs.messagebus.Subscribe"})
+@SupportedAnnotationTypes({"kr.sdusb.libs.messagebus.ListSubscriber", "kr.sdusb.libs.messagebus.Subscribe"})
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public class SubscribeAnnotationProcessor extends AbstractProcessor{
     private List<ClassInfo> classInfos = new ArrayList<ClassInfo>();
+    private Set<String> listSubscribers = new HashSet<>();
     private HashMap<Integer, List<MethodInfo>> map = new HashMap<Integer, List<MethodInfo>>();
 
     @Override
     public boolean process(Set<? extends TypeElement> set, RoundEnvironment roundEnv) {
-
+        System.out.println("Process : " + roundEnv);
         setClassInfosAndMethodInfos(roundEnv);
 
         StringBuilder builder = new StringBuilder()
@@ -114,7 +116,13 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private void setClassInfosAndMethodInfos(RoundEnvironment roundEnv) {
+        for (Element element : roundEnv.getElementsAnnotatedWith(ListSubscriber.class)) {
+            listSubscribers.add(element.toString());
+        }
+
+
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
+            System.out.println("setClassInfosAndMethodInfos : (Subscribe) = " + element);
             String methodName = element.getSimpleName().toString();
             TypeElement classElement = (TypeElement) element.getEnclosingElement();
             String classPackageName = classElement.toString();
@@ -177,6 +185,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             }catch (Exception e){
                 e.printStackTrace();
             }
+        }
+
+        for(ClassInfo ci:classInfos) {
+            ci.hasManyInstance = listSubscribers.contains(ci.classNameWithPackage);
         }
 
         sortClassInfosList();
@@ -242,7 +254,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     private String getImportStrings() {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("import android.os.Handler;\nimport android.os.Looper;\nimport java.lang.Thread;\nimport java.lang.Runnable;\n");
+        sb.append("import android.os.Handler;\nimport android.os.Looper;\nimport java.lang.Thread;\nimport java.lang.Runnable;\nimport java.util.ArrayList;\nimport java.util.List;\n");
         for(ClassInfo ci:classInfos) {
             if(ci.classNameWithPackage != null) {
                 sb.append("import ").append(ci.classNameWithPackage).append(";\n");
@@ -257,7 +269,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         sb.append("\tprivate Handler handler;\n");
         for(ClassInfo ci:classInfos) {
-            sb.append("\tprivate ").append(ci.className).append(" ").append(ci.className.toLowerCase()).append(";\n");
+            if(ci.hasManyInstance) {
+                sb.append("\tprivate List<").append(ci.className).append("> ").append(ci.className.toLowerCase()).append(" = new ArrayList<>();\n");
+            } else {
+                sb.append("\tprivate ").append(ci.className).append(" ").append(ci.className.toLowerCase()).append(";\n");
+            }
         }
 
         return sb.toString();
@@ -268,9 +284,14 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         sb.append("\tpublic void register(Object model) {\n\t\t");
         for(ClassInfo ci:classInfos) {
-            sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n")
-                    .append("\t\t\t").append(ci.className.toLowerCase()).append(" = (").append(ci.classNameWithPackage).append(")model;\n")
-                    .append("\t\t} else ");
+            sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
+
+            if(ci.hasManyInstance) {
+                sb.append("\t\t\t").append(ci.className.toLowerCase()).append(".add((").append(ci.classNameWithPackage).append(")model);\n");
+            } else {
+                sb.append("\t\t\t").append(ci.className.toLowerCase()).append(" = (").append(ci.classNameWithPackage).append(")model;\n");
+            }
+            sb.append("\t\t} else ");
         }
         sb.append("{}\n")
                 .append("\t}\n\n");
@@ -346,20 +367,63 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
                 if(methodInfo.runOnMainThread) {
                     sb.append("\t\tif(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n");
-                    sb.append("\t\t\tif(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                            .append("\t\t\t\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                            .append("\t\t\t}\n");
-                    sb.append("\t\t} else {\n")
-                            .append("\t\t\thandler.post(new Runnable(){\n\t\t\t\t@Override public void run() {\n");
 
-                    String defaultTabs = "\t\t\t\t\t";
+
+                    String defaultTabs = "\t\t\t";
                     if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
                         sb.append(defaultTabs).append("try{\n");
                         defaultTabs += "\t";
                     }
-                    sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                            .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                            .append(defaultTabs).append("}\n");
+
+                    if(methodInfo.classInfo.hasManyInstance) {
+                        sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" a:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                                .append(defaultTabs).append("\ta.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                                .append(defaultTabs).append("}\n");
+                    } else {
+                        sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                                .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                                .append(defaultTabs).append("}\n");
+                    }
+
+                    defaultTabs = "\t\t\t";
+                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+                        sb.append(defaultTabs).append("}\n");
+                        int count = 0;
+                        for(String throwString : methodInfo.throwns) {
+                            sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
+                            count++;
+                        }
+                    }
+
+//                    if(methodInfo.classInfo.hasManyInstance) {
+//                        sb.append("\t\t\tfor(").append(methodInfo.classInfo.className).append(" a:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+//                                .append("\t\t\t\ta.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+//                                .append("\t\t\t}\n");
+//                    } else {
+//                        sb.append("\t\t\tif(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+//                                .append("\t\t\t\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+//                                .append("\t\t\t}\n");
+//                    }
+
+
+                    sb.append("\t\t} else {\n")
+                            .append("\t\t\thandler.post(new Runnable(){\n\t\t\t\t@Override public void run() {\n");
+
+                    defaultTabs = "\t\t\t\t\t";
+                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+                        sb.append(defaultTabs).append("try{\n");
+                        defaultTabs += "\t";
+                    }
+
+                    if(methodInfo.classInfo.hasManyInstance) {
+                        sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" a:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                                .append(defaultTabs).append("\ta.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                                .append(defaultTabs).append("}\n");
+                    } else {
+                        sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                                .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                                .append(defaultTabs).append("}\n");
+                    }
 
                     defaultTabs = "\t\t\t\t\t";
                     if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
@@ -415,9 +479,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         public final String classNameWithPackage;
         public final String className;
         public final List<String> superClasses;
+        public boolean hasManyInstance = false;
 
         private ClassInfo(String classNameWithPackage, List<String> superClasses) {
             this.superClasses = superClasses;
+
             if(classNameWithPackage.equals("boolean")) {
                 this.classNameWithPackage = null;
                 className = classNameWithPackage;
