@@ -6,6 +6,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,12 +39,13 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         if(roundEnv == null || roundEnv.processingOver() || roundEnv.getRootElements().size() == 0) {
             return false;
         }
-        if(roundEnv.getRootElements().size() == 1) {
-            for(Element ele : roundEnv.getRootElements()) {
-                if(ele.getSimpleName().toString().contains("MessageBus")) {
-                    return false;
-                }
-            }
+        Collection<? extends Element> annotatedElements1 = roundEnv.getElementsAnnotatedWith(ListSubscriber.class);
+        Collection<? extends Element> annotatedElements2 = roundEnv.getElementsAnnotatedWith(Subscribe.class);
+        System.out.println("[MessageBus] Check Annotated Classes List Size = " + (annotatedElements1.size() + annotatedElements2.size()));
+
+        if(annotatedElements1.size() + annotatedElements2.size() == 0) {
+            System.out.println("###########################################");
+            return false;
         }
 
         long startTime = System.currentTimeMillis();
