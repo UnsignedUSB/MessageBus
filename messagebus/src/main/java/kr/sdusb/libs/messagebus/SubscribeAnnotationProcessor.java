@@ -35,7 +35,23 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
     @Override
     public boolean process(Set<? extends TypeElement> set, RoundEnvironment roundEnv) {
-        System.out.println("Process : " + roundEnv);
+        if(roundEnv == null || roundEnv.processingOver() || roundEnv.getRootElements().size() == 0) {
+            return false;
+        }
+        if(roundEnv.getRootElements().size() == 1) {
+            for(Element ele : roundEnv.getRootElements()) {
+                if(ele.getSimpleName().toString().contains("MessageBus")) {
+                    return false;
+                }
+            }
+        }
+
+        long startTime = System.currentTimeMillis();
+
+        System.out.println("###########################################");
+        System.out.println("##            MessageBus Build           ##");
+        System.out.println("###########################################");
+        System.out.println("[MessageBus] Start Process : " + roundEnv);
         setClassInfosAndMethodInfos(roundEnv);
 
         StringBuilder builder = new StringBuilder()
@@ -63,7 +79,14 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             // that occur from the file already existing after its first run, this is normal
         }
 
-        writeMessageBoard();
+//        writeMessageBoard();
+
+        long duration = System.currentTimeMillis() - startTime;
+
+        int sec = (int) (duration / 1000);
+        int msec = (int) (duration % 1000);
+        System.out.println("[MessageBus] Finish Process : " + sec +"." + msec +"s");
+        System.out.println("###########################################");
         return true;
     }
 
@@ -118,13 +141,13 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
     private void setClassInfosAndMethodInfos(RoundEnvironment roundEnv) {
         for (Element element : roundEnv.getElementsAnnotatedWith(ListSubscriber.class)) {
-            System.out.println("(ListSubscriber) = " + element);
+            System.out.println("[MessageBus] (ListSubscriber) = " + element);
             listSubscribers.add(element.toString());
         }
 
 
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
-            System.out.println("(Subscribe) = " + element);
+            System.out.println("[MessageBus] (Subscribe) = " + element);
             String methodName = element.getSimpleName().toString();
             TypeElement classElement = (TypeElement) element.getEnclosingElement();
             String classPackageName = classElement.toString();
@@ -174,8 +197,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 int thread = annotation.thread();
                 int[] events = annotation.events();
                 int priority = annotation.priority();
+                boolean ignoreCastException = annotation.ignoreCastException();
 
-                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread == ThreadType.MAIN, throwns, superClasses);
+                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException);
                 methodInfo.setPriority(priority);
                 methodInfo.classInfo.hasManyInstance = isListSubscriber;
                 if(classInfos.contains(methodInfo.classInfo) == false) {
@@ -199,8 +223,6 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         for(ClassInfo ci:classInfos) {
             ci.hasManyInstance = ci.hasManyInstance || listSubscribers.contains(ci.classNameWithPackage);
-
-            System.out.println("(ci.hasManyInstance) = " + ci.hasManyInstance);
         }
 
         sortClassInfosList();
@@ -264,6 +286,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getImportStrings() {
+        System.out.println("[MessageBus] Writing Imports");
         StringBuilder sb = new StringBuilder();
 
         sb.append("import android.os.Handler;\nimport android.os.Looper;\nimport java.lang.Thread;\nimport java.lang.Runnable;\nimport java.util.ArrayList;\nimport java.util.List;\n");
@@ -277,6 +300,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getVariablesString() {
+        System.out.println("[MessageBus] Writing Variables");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tprivate Handler handler;\n");
@@ -292,6 +316,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getRegisterPartString() {
+        System.out.println("[MessageBus] Writing regist() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void register(Object model) {\n\t\t");
@@ -313,6 +338,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getUnregisterPartString() {
+        System.out.println("[MessageBus] Writing unregist() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void unregister(Object model) {\n\t\t");
@@ -334,6 +360,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getEventHandleMethodString() {
+        System.out.println("[MessageBus] Writing handle() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void handle(int what, Object data) {\n")
@@ -364,16 +391,159 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
 
+    private String getMethodDefinition_MainThread(MethodInfo methodInfo) {
+        System.out.println("[MessageBus] Writing private Method for MainThread : " + getEventHandlerMethodName(methodInfo, -1));
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\t\tif(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n");
+
+        String defaultTabs = "\t\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("try{\n");
+            defaultTabs += "\t";
+        }
+
+        if(methodInfo.classInfo.hasManyInstance) {
+            sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        } else {
+            sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        }
+
+        defaultTabs = "\t\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("}\n");
+            int count = 0;
+            for(String throwString : methodInfo.throwns) {
+                sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
+                count++;
+            }
+        }
+
+
+        sb.append("\t\t} else {\n")
+                .append("\t\t\thandler.post(new Runnable(){\n\t\t\t\t@Override public void run() {\n");
+
+        defaultTabs = "\t\t\t\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("try{\n");
+            defaultTabs += "\t";
+        }
+
+        if(methodInfo.classInfo.hasManyInstance) {
+            sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        } else {
+            sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        }
+
+        defaultTabs = "\t\t\t\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("}\n");
+            int count = 0;
+            for(String throwString : methodInfo.throwns) {
+                sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
+                count++;
+            }
+        }
+        sb.append("\t\t\t\t}\n")
+                .append("\t\t\t});\n")
+                .append("\t\t}\n")
+                .append("\t}\n\n");
+
+        return sb.toString();
+    }
+
+    private String getMethodDefinition_CurrentThread(MethodInfo methodInfo) {
+        System.out.println("[MessageBus] Writing private Method for Current Thread : " + getEventHandlerMethodName(methodInfo, -1));
+        StringBuilder sb = new StringBuilder();
+
+        String defaultTabs = "\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("try{\n");
+            defaultTabs += "\t";
+        }
+
+        if(methodInfo.classInfo.hasManyInstance) {
+            sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        } else {
+            sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        }
+
+        defaultTabs = "\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("}\n");
+            int count = 0;
+            for(String throwString : methodInfo.throwns) {
+                sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
+                count++;
+            }
+        }
+        sb.append("\t}\n\n");
+
+        return sb.toString();
+    }
+
+
+    private String getMethodDefinition_NewThread(MethodInfo methodInfo) {
+        System.out.println("[MessageBus] Writing private Method for New Thread : " + getEventHandlerMethodName(methodInfo, -1));
+        StringBuilder sb = new StringBuilder();
+        String defaultTabs;
+        sb.append("\t\tnew java.lang.Thread(new Runnable(){\n\t\t\t@Override public void run() {\n");
+
+        defaultTabs = "\t\t\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("try{\n");
+            defaultTabs += "\t";
+        }
+
+        if(methodInfo.classInfo.hasManyInstance) {
+            sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        } else {
+            sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("}\n");
+        }
+
+        defaultTabs = "\t\t\t\t";
+        if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
+            sb.append(defaultTabs).append("}\n");
+            int count = 0;
+            for(String throwString : methodInfo.throwns) {
+                sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
+                count++;
+            }
+        }
+        sb.append("\t\t\t}\n")
+                .append("\t\t});\n")
+                .append("\t}\n\n");
+
+
+        return sb.toString();
+    }
 
     private String getMethodDefinitionString() {
         StringBuilder sb = new StringBuilder();
         for(int event:map.keySet()) {
             for(MethodInfo methodInfo:map.get(event)) {
+                System.out.println("[MessageBus] Writing private Method : " + getEventHandlerMethodName(methodInfo, event));
                 sb.append("\tprivate void ").append(getEventHandlerMethodName(methodInfo, event));
 
                 if(methodInfo.hasMessageParam) {
                     sb.append("(");
-                    if(methodInfo.runOnMainThread) {
+                    if(methodInfo.threadType != ThreadType.CURRENT) {
                         sb.append("final ");
                     }
                     sb.append(methodInfo.paramClassNameWithPackage).append(" data) {\n");
@@ -381,117 +551,16 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                     sb.append("() {\n");
                 }
 
-                if(methodInfo.runOnMainThread) {
-                    sb.append("\t\tif(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n");
-
-
-                    String defaultTabs = "\t\t\t";
-                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-                        sb.append(defaultTabs).append("try{\n");
-                        defaultTabs += "\t";
-                    }
-
-                    if(methodInfo.classInfo.hasManyInstance) {
-                        sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                                .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                                .append(defaultTabs).append("}\n");
-                    } else {
-                        sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                                .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                                .append(defaultTabs).append("}\n");
-                    }
-
-                    defaultTabs = "\t\t\t";
-                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-                        sb.append(defaultTabs).append("}\n");
-                        int count = 0;
-                        for(String throwString : methodInfo.throwns) {
-                            sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
-                            count++;
-                        }
-                    }
-
-
-                    sb.append("\t\t} else {\n")
-                            .append("\t\t\thandler.post(new Runnable(){\n\t\t\t\t@Override public void run() {\n");
-
-                    defaultTabs = "\t\t\t\t\t";
-                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-                        sb.append(defaultTabs).append("try{\n");
-                        defaultTabs += "\t";
-                    }
-
-                    if(methodInfo.classInfo.hasManyInstance) {
-                        sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                                .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                                .append(defaultTabs).append("}\n");
-                    } else {
-                        sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                                .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                                .append(defaultTabs).append("}\n");
-                    }
-
-                    defaultTabs = "\t\t\t\t\t";
-                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-                        sb.append(defaultTabs).append("}\n");
-                        int count = 0;
-                        for(String throwString : methodInfo.throwns) {
-                            sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
-                            count++;
-                        }
-                    }
-                    sb.append("\t\t\t\t}\n")
-                            .append("\t\t\t});\n")
-                            .append("\t\t}\n")
-                            .append("\t}\n\n");
-                } else {
-
-
-                    String defaultTabs = "\t\t";
-                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-                        sb.append(defaultTabs).append("try{\n");
-                        defaultTabs += "\t";
-                    }
-
-                    if(methodInfo.classInfo.hasManyInstance) {
-                        sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                                .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                                .append(defaultTabs).append("}\n");
-                    } else {
-                        sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                                .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
-                                .append(defaultTabs).append("}\n");
-                    }
-
-                    defaultTabs = "\t\t";
-                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-                        sb.append(defaultTabs).append("}\n");
-                        int count = 0;
-                        for(String throwString : methodInfo.throwns) {
-                            sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
-                            count++;
-                        }
-                    }
-//                    sb.append("\t\tif(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n");
-//
-//                    String defaultTabs = "\t\t\t";
-//                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-//                        sb.append(defaultTabs).append("try{\n");
-//                        defaultTabs += "\t";
-//                    }
-//                    sb.append(defaultTabs).append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n");
-//
-//                    defaultTabs = "\t\t\t";
-//                    if(methodInfo.throwns != null && methodInfo.throwns.size() > 0) {
-//                        sb.append(defaultTabs).append("}\n");
-//                        int count = 0;
-//                        for(String throwString : methodInfo.throwns) {
-//                            sb.append(defaultTabs).append("catch (").append(throwString).append(" e").append(count).append("){}\n");
-//                            count++;
-//                        }
-//                    }
-//                    sb.append("\t\t}\n")
-                    sb.append("\t}\n\n");
+                switch (methodInfo.threadType) {
+                    case ThreadType.MAIN:
+                        sb.append(getMethodDefinition_MainThread(methodInfo));
+                        break;
+                    case ThreadType.CURRENT:
+                        sb.append(getMethodDefinition_CurrentThread(methodInfo));
+                        break;
+                    case ThreadType.NEW:
+                        sb.append(getMethodDefinition_NewThread(methodInfo));
+                        break;
                 }
             }
         }
@@ -565,13 +634,15 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         public final String paramClassNameWithPackage;
         public final boolean hasMessageParam;
         public final int[] values;
-        public final boolean runOnMainThread;
+        public final @ThreadType int threadType;
         public final List<String> throwns;
+        public final boolean ignoreCastException;
 
-        private MethodInfo(String classNameWithPackage, String methodName, String paramClassNameWithPackage, boolean hasMessageParam, int[] values, boolean runOnMainThread, List<String> throwns, List<String> superClasses) {
+        private MethodInfo(String classNameWithPackage, String methodName, String paramClassNameWithPackage, boolean hasMessageParam, int[] values, @ThreadType int threadType, List<String> throwns, List<String> superClasses, boolean ignoreCastException) {
+            this.ignoreCastException = ignoreCastException;
             this.classInfo = new ClassInfo(classNameWithPackage.trim(), superClasses);
             this.methodName = methodName;
-            this.runOnMainThread = runOnMainThread;
+            this.threadType = threadType;
             this.throwns = throwns;
             this.paramClassNameWithPackage = paramClassNameWithPackage;
             this.hasMessageParam = hasMessageParam;

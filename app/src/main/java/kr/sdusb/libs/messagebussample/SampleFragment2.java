@@ -43,12 +43,12 @@ public void onDestroy() {
         textView = getView().findViewById(R.id.textView);
     }
 
-    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD, priority = 1)
+    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_UI_THREAD, thread = ThreadType.MAIN, priority = 1)
     public void onMessageChanged_UIThread(String message) {
         textView.append(message+"\n");
     }
 
-    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = ThreadType.MAIN)
+    @Subscribe(events = SampleFragment1.MESSAGE_TEXT_WORKER_THREAD, thread = ThreadType.CURRENT)
     public void onMessageChanged_WorkerThread(String message) {
         textView.append(message+"\n");
     }

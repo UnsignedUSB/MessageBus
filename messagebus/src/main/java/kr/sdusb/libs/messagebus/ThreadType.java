@@ -7,4 +7,5 @@ package kr.sdusb.libs.messagebus;
 public @interface ThreadType {
     int MAIN = 0;
     int CURRENT = 1;
+    int NEW = 2;
 }

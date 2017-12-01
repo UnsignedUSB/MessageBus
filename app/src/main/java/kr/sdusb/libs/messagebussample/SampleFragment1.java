@@ -19,13 +19,13 @@ public class SampleFragment1 extends Fragment {
 
     public static final int MESSAGE_TEXT_UI_THREAD = 0x00000001;
     public static final int MESSAGE_TEXT_WORKER_THREAD = 0x00000002;
+    public static final int MESSAGE_TEXT_NEW_THREAD = 0x00000003;
 
     private EditText editText;
     private Button mainThreadButton;
     private Button workerThreadButton;
 
     public SampleFragment1() {
-
     }
 
     @Nullable

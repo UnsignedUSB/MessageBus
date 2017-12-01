@@ -21,4 +21,8 @@ public class MainActivity extends AppCompatActivity {
     public void onMessageReceived() {
         Toast.makeText(this, "Message Received", Toast.LENGTH_SHORT).show();
     }
+    @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, thread = ThreadType.NEW, priority = 2)
+    public void testNewThread() {
+        Toast.makeText(this, "Message Received", Toast.LENGTH_SHORT).show();
+    }
 }

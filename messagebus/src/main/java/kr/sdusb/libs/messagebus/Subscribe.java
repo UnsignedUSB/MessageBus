@@ -8,4 +8,5 @@ public @interface Subscribe {
     @ThreadType int thread() default ThreadType.CURRENT;
     int[] events();
     int priority() default Integer.MAX_VALUE;
+    boolean ignoreCastException() default false;
 }
