@@ -198,8 +198,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 int[] events = annotation.events();
                 int priority = annotation.priority();
                 boolean ignoreCastException = annotation.ignoreCastException();
+                boolean receiveEventType = false;//annotation.receiveEventType();
 
-                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException);
+                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException, receiveEventType);
                 methodInfo.setPriority(priority);
                 methodInfo.classInfo.hasManyInstance = isListSubscriber;
                 if(classInfos.contains(methodInfo.classInfo) == false) {
@@ -644,9 +645,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         public final @ThreadType int threadType;
         public final List<String> throwns;
         public final boolean ignoreCastException;
+        public final boolean receiveEventType;
 
-        private MethodInfo(String classNameWithPackage, String methodName, String paramClassNameWithPackage, boolean hasMessageParam, int[] values, @ThreadType int threadType, List<String> throwns, List<String> superClasses, boolean ignoreCastException) {
+        private MethodInfo(String classNameWithPackage, String methodName, String paramClassNameWithPackage, boolean hasMessageParam, int[] values, @ThreadType int threadType, List<String> throwns, List<String> superClasses, boolean ignoreCastException, boolean receiveEventType) {
             this.ignoreCastException = ignoreCastException;
+            this.receiveEventType = receiveEventType;
             this.classInfo = new ClassInfo(classNameWithPackage.trim(), superClasses);
             this.methodName = methodName;
             this.threadType = threadType;
