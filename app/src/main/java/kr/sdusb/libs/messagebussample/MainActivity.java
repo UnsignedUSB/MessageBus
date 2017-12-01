@@ -22,7 +22,7 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "Message Received", Toast.LENGTH_SHORT).show();
     }
     @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, thread = ThreadType.NEW, priority = 2)
-    public void testNewThread() {
+    public void testNewThread() throws Exception{
         Toast.makeText(this, "Message Received", Toast.LENGTH_SHORT).show();
     }
     @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, thread = ThreadType.NEW, priority = 3, ignoreCastException = true)

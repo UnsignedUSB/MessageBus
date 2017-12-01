@@ -537,7 +537,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             }
         }
         sb.append("\t\t\t}\n")
-                .append("\t\t});\n")
+                .append("\t\t}).start();\n")
                 .append("\t}\n\n");
 
 
