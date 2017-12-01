@@ -371,9 +371,16 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
             List<String> methodStringList = new ArrayList<String>();
             for(MethodInfo info : infoList) {
-                String methodString = info.hasMessageParam
-                        ? String.format("\t\t\t\t%s((%s)data);\n", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
-                        : String.format("\t\t\t\t%s();\n", getEventHandlerMethodName(info, event));
+                String methodString = null;
+                if(info.ignoreCastException) {
+                    methodString = info.hasMessageParam
+                            ? String.format("\t\t\t\ttry{%s((%s)data);}catch(ClassCastException e){}\n", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
+                            : String.format("\t\t\t\ttry{%s();}catch(ClassCastException e){}\n", getEventHandlerMethodName(info, event));
+                } else {
+                    methodString = info.hasMessageParam
+                            ? String.format("\t\t\t\t%s((%s)data);\n", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
+                            : String.format("\t\t\t\t%s();\n", getEventHandlerMethodName(info, event));
+                }
                 if(methodStringList.contains(methodString) == false) {
                     methodStringList.add(methodString);
                 }
