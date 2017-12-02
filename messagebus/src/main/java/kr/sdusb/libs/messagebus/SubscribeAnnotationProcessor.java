@@ -54,7 +54,12 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         System.out.println("##            MessageBus Build           ##");
         System.out.println("###########################################");
         System.out.println("[MessageBus] Start Process : " + roundEnv);
-        setClassInfosAndMethodInfos(roundEnv);
+        try{
+            setClassInfosAndMethodInfos(roundEnv);
+        }catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
 
         StringBuilder builder = new StringBuilder()
                 .append("package kr.sdusb.libs.messagebus;\n\n")
@@ -136,12 +141,12 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
 
-    private boolean hasMessageParam(Element element) {
+    private boolean hasMessageParam(Element element, boolean withEventType) {
         ExecutableElement methodElement = (ExecutableElement) element;
-        return methodElement.getParameters() != null && methodElement.getParameters().size() == 1;
+        return methodElement.getParameters() != null && methodElement.getParameters().size() >= (withEventType ? 2 :1);
     }
 
-    private void setClassInfosAndMethodInfos(RoundEnvironment roundEnv) {
+    private void setClassInfosAndMethodInfos(RoundEnvironment roundEnv) throws Exception{
         for (Element element : roundEnv.getElementsAnnotatedWith(ListSubscriber.class)) {
             System.out.println("[MessageBus] (ListSubscriber) = " + element);
             listSubscribers.add(element.toString());
@@ -149,6 +154,16 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
+            Subscribe annotation = element.getAnnotation(Subscribe.class);
+
+            int thread = annotation.thread();
+            int[] events = annotation.events();
+            int priority = annotation.priority();
+            boolean ignoreCastException = annotation.ignoreCastException();
+            boolean withEventType = annotation.withEventType();
+            boolean hasMessageParam = hasMessageParam(element, withEventType);
+
+
             System.out.println("[MessageBus] (Subscribe) = " + element);
             String methodName = element.getSimpleName().toString();
             TypeElement classElement = (TypeElement) element.getEnclosingElement();
@@ -176,12 +191,19 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
             ExecutableElement methodElement = (ExecutableElement) element;
             String paramClassNameWithPackage = null;
-            if(methodElement.getParameters() != null && methodElement.getParameters().size() > 1) {
-                throw new RuntimeException("SubscribeAnnotationProcessor : Not supported Method type. Method can have only one parameter.  \n"+classPackageName+"."+methodName);
+            if(methodElement.getParameters() != null && methodElement.getParameters().size() > (withEventType ? 2 :1) ) {
+                throw new RuntimeException("SubscribeAnnotationProcessor : Not supported Method type. Method can have max two parameter.  \n"+classPackageName+"."+methodName);
             }
 
-            if(methodElement.getParameters() != null && methodElement.getParameters().size() == 1) {
-                paramClassNameWithPackage = methodElement.getParameters().get(0).asType().toString();
+            if(methodElement.getParameters() != null) {
+                System.out.println("methodElement.getParameters().size() = " + methodElement.getParameters().size());
+                System.out.println("methodElement = " + methodElement.getSimpleName() );
+                if( !withEventType && methodElement.getParameters().size() == 1 ) {
+                    paramClassNameWithPackage = methodElement.getParameters().get(0).asType().toString();
+                } else if( withEventType && methodElement.getParameters().size() == 2 ) {
+                    paramClassNameWithPackage = methodElement.getParameters().get(1).asType().toString();
+                }
+                System.out.println("paramClassNameWithPackage = " + paramClassNameWithPackage );
             }
 
             List<String> throwns = null;
@@ -192,17 +214,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 }
             }
 
-            Subscribe annotation = element.getAnnotation(Subscribe.class);
             try {
 
-                boolean hasMessageParam = hasMessageParam(element);
-                int thread = annotation.thread();
-                int[] events = annotation.events();
-                int priority = annotation.priority();
-                boolean ignoreCastException = annotation.ignoreCastException();
-                boolean receiveEventType = false;//annotation.receiveEventType();
-
-                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException, receiveEventType);
+                MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException, withEventType);
                 methodInfo.setPriority(priority);
                 methodInfo.classInfo.hasManyInstance = isListSubscriber;
                 if(classInfos.contains(methodInfo.classInfo) == false) {
@@ -374,15 +388,23 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
             List<String> methodStringList = new ArrayList<String>();
             for(MethodInfo info : infoList) {
+
+                String baseMethodString = null;
+                if(info.withEventType) {
+                    baseMethodString = info.hasMessageParam
+                            ? String.format("%s(what, (%s)data);", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
+                            : String.format("%s(what);", getEventHandlerMethodName(info, event));
+                } else  {
+                    baseMethodString = info.hasMessageParam
+                            ? String.format("%s((%s)data);", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
+                            : String.format("%s();", getEventHandlerMethodName(info, event));
+                }
+
                 String methodString = null;
                 if(info.ignoreCastException) {
-                    methodString = info.hasMessageParam
-                            ? String.format("\t\t\t\ttry{%s((%s)data);}catch(ClassCastException e){}\n", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
-                            : String.format("\t\t\t\ttry{%s();}catch(ClassCastException e){}\n", getEventHandlerMethodName(info, event));
+                    methodString = String.format("\t\t\t\ttry{%s}catch(ClassCastException e){}\n", baseMethodString);
                 } else {
-                    methodString = info.hasMessageParam
-                            ? String.format("\t\t\t\t%s((%s)data);\n", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
-                            : String.format("\t\t\t\t%s();\n", getEventHandlerMethodName(info, event));
+                    methodString = String.format("\t\t\t\t%s\n", baseMethodString);
                 }
                 if(methodStringList.contains(methodString) == false) {
                     methodStringList.add(methodString);
@@ -415,11 +437,21 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         if(methodInfo.classInfo.hasManyInstance) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         } else {
             sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         }
 
@@ -445,11 +477,21 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         if(methodInfo.classInfo.hasManyInstance) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         } else {
             sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         }
 
@@ -482,11 +524,21 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         if(methodInfo.classInfo.hasManyInstance) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         } else {
             sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         }
 
@@ -519,11 +571,21 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         if(methodInfo.classInfo.hasManyInstance) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
-                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         } else {
             sb.append(defaultTabs).append("if(").append(methodInfo.classInfo.className.toLowerCase()).append(" != null) {\n")
-                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName).append(methodInfo.hasMessageParam ? "(data);\n" : "();\n")
+                    .append(defaultTabs).append("\t").append(methodInfo.classInfo.className.toLowerCase()).append(".").append(methodInfo.methodName)
+                    .append("(")
+                    .append(methodInfo.withEventType ? "what" : "")
+                    .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "")
+                    .append(methodInfo.hasMessageParam ? "data" : "")
+                    .append(");\n")
                     .append(defaultTabs).append("}\n");
         }
 
@@ -550,15 +612,20 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             for(MethodInfo methodInfo:map.get(event)) {
                 System.out.println("[MessageBus] Writing private Method : " + getEventHandlerMethodName(methodInfo, event));
                 sb.append("\tprivate void ").append(getEventHandlerMethodName(methodInfo, event));
-
                 if(methodInfo.hasMessageParam) {
-                    sb.append("(");
+                    sb.append("(")
+                            .append(methodInfo.withEventType && (methodInfo.threadType != ThreadType.CURRENT) ? "final " : "")
+                            .append(methodInfo.withEventType ? "int what" : "")
+                            .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "");
                     if(methodInfo.threadType != ThreadType.CURRENT) {
                         sb.append("final ");
                     }
                     sb.append(methodInfo.paramClassNameWithPackage).append(" data) {\n");
                 } else {
-                    sb.append("() {\n");
+                    sb.append("(");
+                    sb.append(methodInfo.withEventType && (methodInfo.threadType != ThreadType.CURRENT) ? "final " : "")
+                            .append(methodInfo.withEventType ? "int what" : "");
+                    sb.append(") {\n");
                 }
 
                 switch (methodInfo.threadType) {
@@ -647,11 +714,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         public final @ThreadType int threadType;
         public final List<String> throwns;
         public final boolean ignoreCastException;
-        public final boolean receiveEventType;
+        public final boolean withEventType;
 
-        private MethodInfo(String classNameWithPackage, String methodName, String paramClassNameWithPackage, boolean hasMessageParam, int[] values, @ThreadType int threadType, List<String> throwns, List<String> superClasses, boolean ignoreCastException, boolean receiveEventType) {
+        private MethodInfo(String classNameWithPackage, String methodName, String paramClassNameWithPackage, boolean hasMessageParam, int[] values, @ThreadType int threadType, List<String> throwns, List<String> superClasses, boolean ignoreCastException, boolean withEventType) {
             this.ignoreCastException = ignoreCastException;
-            this.receiveEventType = receiveEventType;
+            this.withEventType = withEventType;
             this.classInfo = new ClassInfo(classNameWithPackage.trim(), superClasses);
             this.methodName = methodName;
             this.threadType = threadType;

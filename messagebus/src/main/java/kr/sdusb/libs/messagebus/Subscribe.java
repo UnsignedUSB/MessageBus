@@ -9,5 +9,5 @@ public @interface Subscribe {
     int[] events();
     int priority() default Integer.MAX_VALUE;
     boolean ignoreCastException() default false;
-//    boolean receiveEventType() default false;
+    boolean withEventType() default false;
 }
