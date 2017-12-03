@@ -140,7 +140,6 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         }
     }
 
-
     private boolean hasMessageParam(Element element, boolean withEventType) {
         ExecutableElement methodElement = (ExecutableElement) element;
         return methodElement.getParameters() != null && methodElement.getParameters().size() >= (withEventType ? 2 :1);
@@ -154,58 +153,61 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
+            System.out.println("[MessageBus] (Subscribe) = " + element);
+
             Subscribe annotation = element.getAnnotation(Subscribe.class);
 
+            // Get Values of Subscribe
             int thread = annotation.thread();
             int[] events = annotation.events();
             int priority = annotation.priority();
             boolean ignoreCastException = annotation.ignoreCastException();
             boolean withEventType = annotation.withEventType();
             boolean hasMessageParam = hasMessageParam(element, withEventType);
-
-
-            System.out.println("[MessageBus] (Subscribe) = " + element);
             String methodName = element.getSimpleName().toString();
             TypeElement classElement = (TypeElement) element.getEnclosingElement();
             String classPackageName = classElement.toString();
             boolean isListSubscriber = false;
 
+            // find ListSubscriber
             for(AnnotationMirror am:classElement.getAnnotationMirrors()) {
                 if(am.getAnnotationType().toString().equals(ListSubscriber.class.getCanonicalName())) {
                     isListSubscriber = true;
                 }
             }
 
+            // Get SuperClasses
             List<String> superClasses = new ArrayList<String>();
-            while( classElement.getSuperclass() != null && classElement.getSuperclass().toString().equals("java.lang.Object") == false ) {
+            while( classElement.getSuperclass() != null && !classElement.getSuperclass().toString().equals("java.lang.Object")) {
                 TypeMirror mirror = classElement.getSuperclass();
                 superClasses.add(mirror.toString().trim());
                 classElement = ((TypeElement)((DeclaredType)mirror).asElement());
             }
 
 
-
-            if(element.getModifiers().contains(Modifier.PUBLIC) == false) {
+            // Check Method Type
+            if(!element.getModifiers().contains(Modifier.PUBLIC)) {
                 throw new RuntimeException("SubscribeAnnotationProcessor : Not supported Method type. Method must be public.  \n"+classPackageName+"."+methodName);
             }
 
+
+            // Check Method Parameter Count
             ExecutableElement methodElement = (ExecutableElement) element;
             String paramClassNameWithPackage = null;
-            if(methodElement.getParameters() != null && methodElement.getParameters().size() > (withEventType ? 2 :1) ) {
+            int maxParamSize = withEventType ? 2 :1;
+            if(methodElement.getParameters() != null && methodElement.getParameters().size() > maxParamSize ) {
                 throw new RuntimeException("SubscribeAnnotationProcessor : Not supported Method type. Method can have max two parameter.  \n"+classPackageName+"."+methodName);
             }
 
+
             if(methodElement.getParameters() != null) {
-                System.out.println("methodElement.getParameters().size() = " + methodElement.getParameters().size());
-                System.out.println("methodElement = " + methodElement.getSimpleName() );
-                if( !withEventType && methodElement.getParameters().size() == 1 ) {
-                    paramClassNameWithPackage = methodElement.getParameters().get(0).asType().toString();
-                } else if( withEventType && methodElement.getParameters().size() == 2 ) {
-                    paramClassNameWithPackage = methodElement.getParameters().get(1).asType().toString();
+                System.out.println("[MessageBus] methodElement = " + methodElement.getSimpleName() +" // Param Count = " + methodElement.getParameters().size());
+                if( methodElement.getParameters().size() == maxParamSize ) {
+                    paramClassNameWithPackage = methodElement.getParameters().get(maxParamSize-1).asType().toString();
                 }
-                System.out.println("paramClassNameWithPackage = " + paramClassNameWithPackage );
             }
 
+            // Check Throwns
             List<String> throwns = null;
             if(methodElement.getThrownTypes() != null && methodElement.getThrownTypes().size() > 0) {
                 throwns = new ArrayList<String>();
@@ -215,10 +217,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             }
 
             try {
-
+                // Setting Method Info
                 MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException, withEventType);
                 methodInfo.setPriority(priority);
-                methodInfo.classInfo.hasManyInstance = isListSubscriber;
+                methodInfo.classInfo.isListSubscriber = isListSubscriber;
                 if(classInfos.contains(methodInfo.classInfo) == false) {
                     classInfos.add(methodInfo.classInfo);
                 }
@@ -239,7 +241,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         }
 
         for(ClassInfo ci:classInfos) {
-            ci.hasManyInstance = ci.hasManyInstance || listSubscribers.contains(ci.classNameWithPackage);
+            ci.isListSubscriber = ci.isListSubscriber || listSubscribers.contains(ci.classNameWithPackage);
         }
 
         sortClassInfosList();
@@ -322,7 +324,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         sb.append("\tprivate Handler handler;\n");
         for(ClassInfo ci:classInfos) {
-            if(ci.hasManyInstance) {
+            if(ci.isListSubscriber) {
                 sb.append("\tprivate List<").append(ci.className).append("> ").append(ci.className.toLowerCase()).append(" = new ArrayList<>();\n");
             } else {
                 sb.append("\tprivate ").append(ci.className).append(" ").append(ci.className.toLowerCase()).append(";\n");
@@ -340,7 +342,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         for(ClassInfo ci:classInfos) {
             sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
 
-            if(ci.hasManyInstance) {
+            if(ci.isListSubscriber) {
                 sb.append("\t\t\t").append(ci.className.toLowerCase()).append(".add((").append(ci.classNameWithPackage).append(")model);\n");
             } else {
                 sb.append("\t\t\t").append(ci.className.toLowerCase()).append(" = (").append(ci.classNameWithPackage).append(")model;\n");
@@ -361,7 +363,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         sb.append("\tpublic void unregister(Object model) {\n\t\t");
         for(ClassInfo ci:classInfos) {
             sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
-            if(ci.hasManyInstance) {
+            if(ci.isListSubscriber) {
                 sb.append("\t\t\t").append(ci.className.toLowerCase()).append(".remove((").append(ci.classNameWithPackage).append(")model);\n");
             } else {
                 sb.append("\t\t\t").append(ci.className.toLowerCase()).append(" = null;\n");
@@ -435,7 +437,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.hasManyInstance) {
+        if(methodInfo.classInfo.isListSubscriber) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -475,7 +477,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.hasManyInstance) {
+        if(methodInfo.classInfo.isListSubscriber) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -522,7 +524,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.hasManyInstance) {
+        if(methodInfo.classInfo.isListSubscriber) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -569,7 +571,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.hasManyInstance) {
+        if(methodInfo.classInfo.isListSubscriber) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -658,7 +660,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         public final String classNameWithPackage;
         public final String className;
         public final List<String> superClasses;
-        public boolean hasManyInstance = false;
+        public boolean isListSubscriber = false;
 
         private ClassInfo(String classNameWithPackage, List<String> superClasses) {
             this.superClasses = superClasses;
