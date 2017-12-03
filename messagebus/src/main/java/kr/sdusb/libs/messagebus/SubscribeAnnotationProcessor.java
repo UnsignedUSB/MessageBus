@@ -1,8 +1,6 @@
 package kr.sdusb.libs.messagebus;
 
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -32,7 +30,7 @@ import javax.tools.JavaFileObject;
 public class SubscribeAnnotationProcessor extends AbstractProcessor{
     private List<ClassInfo> classInfos = new ArrayList<ClassInfo>();
     private Set<String> listSubscribers = new HashSet<>();
-    private HashMap<Integer, List<MethodInfo>> map = new HashMap<Integer, List<MethodInfo>>();
+    private HashMap<Integer, HashMap<Integer, List<MethodInfo>>> map = new HashMap<Integer, HashMap<Integer, List<MethodInfo>>>();
 
     @Override
     public boolean process(Set<? extends TypeElement> set, RoundEnvironment roundEnv) {
@@ -97,48 +95,41 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         return true;
     }
 
-    private void writeMessageBoard() {
-        try{
-            List<Integer> eventsList = new ArrayList<Integer>();
-            eventsList.addAll(map.keySet());
-            Collections.sort(eventsList);
-
-            BufferedWriter out = new BufferedWriter(new FileWriter("MessageBoard.csv"));
-//            String s = "File Text";
+//    private void writeMessageBoard() {
+//        try{
+//            List<Integer> eventsList = new ArrayList<Integer>();
+//            eventsList.addAll(map.keySet());
+//            Collections.sort(eventsList);
 //
-//            out.write(s);
-//            out.newLine();
-//            out.write(s);
-//            out.newLine();
-
-            for(int event : eventsList) {
-                out.write(Integer.toHexString(event));
-                out.newLine();
-
-                List<MethodInfo> methodInfoList = map.get(event);
-                for(MethodInfo mi : methodInfoList) {
-                    out.write(",");
-                    if(mi.classInfo != null && mi.classInfo.classNameWithPackage != null) {
-                        out.write("\""+mi.classInfo.className +"\n"+mi.classInfo.classNameWithPackage+"\"");
-                    }
-                    out.write(",");
-                    out.write(mi.methodName);
-                    out.write(",");
-                    if(mi.paramClassNameWithPackage != null) {
-                        String name = mi.paramClassNameWithPackage.substring(mi.paramClassNameWithPackage.lastIndexOf(".")+1);
-                        out.write("\""+name +"\n"+mi.paramClassNameWithPackage+"\"");
-                    }
-
-                    out.newLine();
-                }
-                out.newLine();
-            }
-
-            out.close();
-        }catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+//            BufferedWriter out = new BufferedWriter(new FileWriter("MessageBoard.csv"));
+//            for(int event : eventsList) {
+//                out.write(Integer.toHexString(event));
+//                out.newLine();
+//
+//                List<MethodInfo> methodInfoList = map.get(event);
+//                for(MethodInfo mi : methodInfoList) {
+//                    out.write(",");
+//                    if(mi.classInfo != null && mi.classInfo.classNameWithPackage != null) {
+//                        out.write("\""+mi.classInfo.className +"\n"+mi.classInfo.classNameWithPackage+"\"");
+//                    }
+//                    out.write(",");
+//                    out.write(mi.methodName);
+//                    out.write(",");
+//                    if(mi.paramClassNameWithPackage != null) {
+//                        String name = mi.paramClassNameWithPackage.substring(mi.paramClassNameWithPackage.lastIndexOf(".")+1);
+//                        out.write("\""+name +"\n"+mi.paramClassNameWithPackage+"\"");
+//                    }
+//
+//                    out.newLine();
+//                }
+//                out.newLine();
+//            }
+//
+//            out.close();
+//        }catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//    }
 
     private boolean hasMessageParam(Element element, boolean withEventType) {
         ExecutableElement methodElement = (ExecutableElement) element;
@@ -158,8 +149,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             Subscribe annotation = element.getAnnotation(Subscribe.class);
 
             // Get Values of Subscribe
-            int thread = annotation.thread();
+            int[] groups = annotation.groups();
             int[] events = annotation.events();
+            int thread = annotation.thread();
             int priority = annotation.priority();
             boolean ignoreCastException = annotation.ignoreCastException();
             boolean withEventType = annotation.withEventType();
@@ -226,14 +218,21 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 }
 
 
-                for(int event:events) {
-                    List<MethodInfo> list = map.get(event);
-                    if(list == null) {
-                        list = new ArrayList<MethodInfo>();
-                        map.put(event, list);
+                for(int group:groups) {
+                    HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
+                    if (map == null) {
+                        map = new HashMap<>();
+                        this.map.put(group, map);
                     }
+                    for (int event : events) {
+                        List<MethodInfo> list = map.get(event);
+                        if (list == null) {
+                            list = new ArrayList<MethodInfo>();
+                            map.put(event, list);
+                        }
 
-                    list.add(methodInfo);
+                        list.add(methodInfo);
+                    }
                 }
             }catch (Exception e){
                 e.printStackTrace();
@@ -249,9 +248,12 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private void sortMethodInfoList() {
-        for(int event:map.keySet()) {
-            List<MethodInfo> list = map.get(event);
-            Collections.sort(list);
+        for(int group:map.keySet()) {
+            HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
+            for (int event : map.keySet()) {
+                List<MethodInfo> list = map.get(event);
+                Collections.sort(list);
+            }
         }
     }
 
@@ -382,51 +384,71 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         System.out.println("[MessageBus] Writing handle() Method");
         StringBuilder sb = new StringBuilder();
 
-        sb.append("\tpublic void handle(int what, Object data) {\n")
-                .append("\t\tswitch(what) {\n");
-        for(int event:map.keySet()) {
-            sb.append("\t\t\tcase ").append(event).append(":\n");
-            List<MethodInfo> infoList = map.get(event);
+        sb.append(      "   public void handle(int what, Object data) {\n");
+        sb.append(      "       handle(0, what, data);\n");
+        sb.append(      "   }\n\n");
+        sb.append(      "   public void handle(int group, int what, Object data) {\n");
+        sb.append(      "       switch(group) {\n");
 
-            List<String> methodStringList = new ArrayList<String>();
-            for(MethodInfo info : infoList) {
-
-                String baseMethodString = null;
-                if(info.withEventType) {
-                    baseMethodString = info.hasMessageParam
-                            ? String.format("%s(what, (%s)data);", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
-                            : String.format("%s(what);", getEventHandlerMethodName(info, event));
-                } else  {
-                    baseMethodString = info.hasMessageParam
-                            ? String.format("%s((%s)data);", getEventHandlerMethodName(info, event), info.paramClassNameWithPackage)
-                            : String.format("%s();", getEventHandlerMethodName(info, event));
-                }
-
-                String methodString = null;
-                if(info.ignoreCastException) {
-                    methodString = String.format("\t\t\t\ttry{%s}catch(ClassCastException e){}\n", baseMethodString);
-                } else {
-                    methodString = String.format("\t\t\t\t%s\n", baseMethodString);
-                }
-                if(methodStringList.contains(methodString) == false) {
-                    methodStringList.add(methodString);
-                }
-            }
-
-            for(String methodString:methodStringList) {
-                sb.append(methodString);
-            }
-            sb.append("\t\t\t\tbreak;\n");
+        for(int group:map.keySet()) {
+            sb.append(  "           case " + group +":\n");
+            sb.append(  "               handle_"+group+"(what, data);\n");
+            sb.append(  "               break;\n");
         }
-        sb.append("\t\t}\n")        // end Switch
-                .append("\t}\n");   // end Method
+
+        sb.append(      "       }\n");
+        sb.append(      "   }\n\n");
+
+
+        for(int group:map.keySet()) {
+            HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
+
+            sb.append(      "   private void handle_"+group+"(int what, Object data) {\n")
+              .append(      "       switch(what) {\n");
+            for (int event : map.keySet()) {
+                sb.append(  "           case ").append(event).append(":\n");
+                List<MethodInfo> infoList = map.get(event);
+
+                List<String> methodStringList = new ArrayList<String>();
+                for (MethodInfo info : infoList) {
+
+                    String baseMethodString = null;
+                    if (info.withEventType) {
+                        baseMethodString = info.hasMessageParam
+                                ? String.format("%s(what, (%s)data);", getEventHandlerMethodName(info, group, event), info.paramClassNameWithPackage)
+                                : String.format("%s(what);", getEventHandlerMethodName(info, group, event));
+                    } else {
+                        baseMethodString = info.hasMessageParam
+                                ? String.format("%s((%s)data);", getEventHandlerMethodName(info, group, event), info.paramClassNameWithPackage)
+                                : String.format("%s();", getEventHandlerMethodName(info, group, event));
+                    }
+
+                    String methodString = null;
+                    if (info.ignoreCastException) {
+                        methodString = String.format("\t\t\t\ttry{%s}catch(ClassCastException e){}\n", baseMethodString);
+                    } else {
+                        methodString = String.format("\t\t\t\t%s\n", baseMethodString);
+                    }
+                    if (methodStringList.contains(methodString) == false) {
+                        methodStringList.add(methodString);
+                    }
+                }
+
+                for (String methodString : methodStringList) {
+                    sb.append(methodString);
+                }
+                sb.append("\t\t\t\tbreak;\n");
+            }
+            sb.append("\t\t}\n")        // end Switch
+                    .append("\t}\n");   // end Method
+        }
 
         return sb.toString();
     }
 
 
     private String getMethodDefinition_MainThread(MethodInfo methodInfo) {
-        System.out.println("[MessageBus] Writing private Method for MainThread : " + getEventHandlerMethodName(methodInfo, -1));
+        System.out.println("[MessageBus] Writing private Method for MainThread : " + getEventHandlerMethodName(methodInfo, -1, -1));
         StringBuilder sb = new StringBuilder();
 
         sb.append("\t\tif(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n");
@@ -515,7 +537,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getMethodDefinition_CurrentThread(MethodInfo methodInfo) {
-        System.out.println("[MessageBus] Writing private Method for Current Thread : " + getEventHandlerMethodName(methodInfo, -1));
+        System.out.println("[MessageBus] Writing private Method for Current Thread : " + getEventHandlerMethodName(methodInfo, -1, -1));
         StringBuilder sb = new StringBuilder();
 
         String defaultTabs = "\t\t";
@@ -560,7 +582,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getMethodDefinition_NewThread(MethodInfo methodInfo) {
-        System.out.println("[MessageBus] Writing private Method for New Thread : " + getEventHandlerMethodName(methodInfo, -1));
+        System.out.println("[MessageBus] Writing private Method for New Thread : " + getEventHandlerMethodName(methodInfo, -1, -1));
         StringBuilder sb = new StringBuilder();
         String defaultTabs;
         sb.append("\t\tnew java.lang.Thread(new Runnable(){\n\t\t\t@Override public void run() {\n");
@@ -610,36 +632,39 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
     private String getMethodDefinitionString() {
         StringBuilder sb = new StringBuilder();
-        for(int event:map.keySet()) {
-            for(MethodInfo methodInfo:map.get(event)) {
-                System.out.println("[MessageBus] Writing private Method : " + getEventHandlerMethodName(methodInfo, event));
-                sb.append("\tprivate void ").append(getEventHandlerMethodName(methodInfo, event));
-                if(methodInfo.hasMessageParam) {
-                    sb.append("(")
-                            .append(methodInfo.withEventType && (methodInfo.threadType != ThreadType.CURRENT) ? "final " : "")
-                            .append(methodInfo.withEventType ? "int what" : "")
-                            .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "");
-                    if(methodInfo.threadType != ThreadType.CURRENT) {
-                        sb.append("final ");
+        for(int group:map.keySet()) {
+            HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
+            for (int event : map.keySet()) {
+                for (MethodInfo methodInfo : map.get(event)) {
+                    System.out.println("[MessageBus] Writing private Method : " + getEventHandlerMethodName(methodInfo, group, event));
+                    sb.append("\tprivate void ").append(getEventHandlerMethodName(methodInfo, group, event));
+                    if (methodInfo.hasMessageParam) {
+                        sb.append("(")
+                                .append(methodInfo.withEventType && (methodInfo.threadType != ThreadType.CURRENT) ? "final " : "")
+                                .append(methodInfo.withEventType ? "int what" : "")
+                                .append(methodInfo.withEventType && methodInfo.hasMessageParam ? "," : "");
+                        if (methodInfo.threadType != ThreadType.CURRENT) {
+                            sb.append("final ");
+                        }
+                        sb.append(methodInfo.paramClassNameWithPackage).append(" data) {\n");
+                    } else {
+                        sb.append("(");
+                        sb.append(methodInfo.withEventType && (methodInfo.threadType != ThreadType.CURRENT) ? "final " : "")
+                                .append(methodInfo.withEventType ? "int what" : "");
+                        sb.append(") {\n");
                     }
-                    sb.append(methodInfo.paramClassNameWithPackage).append(" data) {\n");
-                } else {
-                    sb.append("(");
-                    sb.append(methodInfo.withEventType && (methodInfo.threadType != ThreadType.CURRENT) ? "final " : "")
-                            .append(methodInfo.withEventType ? "int what" : "");
-                    sb.append(") {\n");
-                }
 
-                switch (methodInfo.threadType) {
-                    case ThreadType.MAIN:
-                        sb.append(getMethodDefinition_MainThread(methodInfo));
-                        break;
-                    case ThreadType.CURRENT:
-                        sb.append(getMethodDefinition_CurrentThread(methodInfo));
-                        break;
-                    case ThreadType.NEW:
-                        sb.append(getMethodDefinition_NewThread(methodInfo));
-                        break;
+                    switch (methodInfo.threadType) {
+                        case ThreadType.MAIN:
+                            sb.append(getMethodDefinition_MainThread(methodInfo));
+                            break;
+                        case ThreadType.CURRENT:
+                            sb.append(getMethodDefinition_CurrentThread(methodInfo));
+                            break;
+                        case ThreadType.NEW:
+                            sb.append(getMethodDefinition_NewThread(methodInfo));
+                            break;
+                    }
                 }
             }
         }
@@ -647,10 +672,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         return sb.toString();
     }
 
-    private String getEventHandlerMethodName(MethodInfo info, int event) {
+    private String getEventHandlerMethodName(MethodInfo info, int group, int event) {
         StringBuilder builder = new StringBuilder();
 
-        builder.append("handleEvent_").append(info.classInfo.classNameWithPackage.replaceAll("[.]","_")).append("_").append(info.methodName).append("_").append(Integer.toHexString(event));
+        builder.append("handleEvent_").append(info.classInfo.classNameWithPackage.replaceAll("[.]","_")).append("_").append(info.methodName).append("_").append(Integer.toHexString(group)).append("_").append(Integer.toHexString(event));
 
         return builder.toString();
     }
