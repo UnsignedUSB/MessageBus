@@ -285,7 +285,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     private String getSingleTonString() {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("\tprivate static MessageBus INSTANCE = null;\n" +
+        sb.append(
+                "\tpublic static final int GLOBAL_GROUP = 0;\n" +
+                "\tprivate static MessageBus INSTANCE = null;\n" +
                 "\tpublic static MessageBus getInstance() {\n" +
                 "\t\tif(INSTANCE == null) {\n" +
                 "\t\t\tINSTANCE = new MessageBus();\n" +
@@ -385,7 +387,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         StringBuilder sb = new StringBuilder();
 
         sb.append(      "   public void handle(int what, Object data) {\n");
-        sb.append(      "       handle(0, what, data);\n");
+        sb.append(      "       handle(GLOBAL_GROUP, what, data);\n");
         sb.append(      "   }\n\n");
         sb.append(      "   public void handle(int group, int what, Object data) {\n");
         sb.append(      "       switch(group) {\n");
