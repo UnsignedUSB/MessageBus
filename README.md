@@ -21,7 +21,7 @@
 	  
 	  Application Gradle에서 위의 내용을 추가해 주시면 됩니다. 
 	  추가로 Annotation Processor를 사용하기 위해 아래의 내용도 추가가 필요합니다. 
-	  ![빌드컨피크.jpg](/files/0a705587-61bc-1688-8161-c237f39c4392)
+	  ![1.jpg](/files/0a705587-61bc-1688-8161-c237f39c4392)
 
 
 </br>
@@ -29,9 +29,9 @@
 2. **적용하기 (기본)**
 	- Message 전달
 	Message를 던지는 방법은 아래와 같습니다.
-	![MessageBus.jpeg](/files/0a705587-61bc-1688-8161-c237f3774389)
+	![2.jpeg](/files/0a705587-61bc-1688-8161-c237f3774389)
     조금 더 확실하게 보기 위해 handle()을 살펴보면 아래와 같습니다.
-	![MessageBus Handle.jpg](/files/0a705587-61bc-1688-8161-c237f35a4384)
+	![3.jpg](/files/0a705587-61bc-1688-8161-c237f35a4384)
     what : 이벤트 식별자
 	data : 전달하고자 하는 Data Class (이벤트만 전달하고자 할 때는 null)
  </br>
@@ -52,7 +52,7 @@
 ## 3. @Subscribe 세부사항
 ----
 
-![Subscribe.jpg](/files/0a705587-61bc-1688-8161-c237f385438d)
+![4.jpg](/files/0a705587-61bc-1688-8161-c237f385438d)
 
 1. **int[] groups**   (Default = 0)
 	**Message를 일부에만 전달하고 싶을 때, group을 지정**할 수 있습니다. 
