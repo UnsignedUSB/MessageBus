@@ -35,6 +35,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     @Override
     public boolean process(Set<? extends TypeElement> set, RoundEnvironment roundEnv) {
         if(roundEnv == null || roundEnv.processingOver() || roundEnv.getRootElements().size() == 0) {
+            writeDefaultClass();
             return false;
         }
         Collection<? extends Element> annotatedElements1 = roundEnv.getElementsAnnotatedWith(ListSubscriber.class);
@@ -42,7 +43,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         System.out.println("[MessageBus] Check Annotated Classes List Size = " + (annotatedElements1.size() + annotatedElements2.size()));
 
         if(annotatedElements1.size() + annotatedElements2.size() == 0) {
-            System.out.println("###########################################");
+            writeDefaultClass();
             return false;
         }
 
@@ -68,6 +69,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 .append( getVariablesString() ).append("\n")
                 .append( getRegisterPartString() )
                 .append( getUnregisterPartString() )
+                .append( getGroupMessageIgnoreDurationString() )
+                .append( getGroupBlockString() )
+                .append( getGroupBlockWithDurationString() )
+                .append( getGroupUnblockString() )
                 .append( getEventHandleMethodString() )
                 .append( getMethodDefinitionString() )
                 .append("}\n"); // close class
@@ -94,6 +99,87 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         System.out.println("###########################################");
         return true;
     }
+
+    private void writeDefaultClass() {
+        StringBuilder builder = new StringBuilder()
+                .append("package kr.sdusb.libs.messagebus;\n\n")
+                .append( getImportStrings() ).append("\n")   // import
+                .append("public class MessageBus {\n\n")   // open class
+                .append( getSingleTonString() )
+                .append( getConstructorString() );try { // write the file
+            JavaFileObject source = processingEnv.getFiler().createSourceFile("kr.sdusb.libs.messagebus.MessageBus");
+
+            Writer writer = source.openWriter();
+            writer.write(builder.toString());
+            writer.flush();
+            writer.close();
+        } catch (IOException e) {
+            // Note: calling e.printStackTrace() will print IO errors
+            // that occur from the file already existing after its first run, this is normal
+        }
+
+        System.out.println("###########################################");
+    }
+
+    private void writeMessageBusInterface() {
+        String interfaceString =
+                "package kr.sdusb.libs.messagebus;\n\n"+
+                "import android.os.Looper;\n" +
+                "import android.os.Handler;\n"+
+                "import kr.sdusb.libs.messagebus.MessageBus;\n\n" +
+                "public interface IMessageBusModel {\n" +
+                "    default void sendEmptyMessage(int what) {\n" +
+                "        sendMessage(MessageBus.GLOBAL_GROUP, what, null);\n" +
+                "    }\n" +
+                "    default void sendEmptyMessageDelayed(final int what, int delayMsec) {\n" +
+                "        sendMessageDelayed(MessageBus.GLOBAL_GROUP, what, null, delayMsec);\n" +
+                "    }\n" +
+                "    default void sendMessage(int what, Object data) {\n" +
+                "        sendMessage(MessageBus.GLOBAL_GROUP , what, data);\n" +
+                "    }\n" +
+                "    default void sendMessageDelayed(final int what, final Object data, int delayMsec) {\n" +
+                "        sendMessageDelayed(MessageBus.GLOBAL_GROUP, what, data, delayMsec);\n" +
+                "    }\n" +
+                "    default void sendEmptyMessage(int group, int what) {\n" +
+                "        sendMessage(group, what, null);\n" +
+                "    }\n" +
+                "    default void sendEmptyMessageDelayed(final int group, final int what, int delayMsec) {\n" +
+                "        sendMessageDelayed(group, what, null, delayMsec);\n" +
+                "    }\n" +
+                "    default void sendMessage(int group, int what, Object data) {\n" +
+                "        MessageBus.getInstance().handle(group, what, data);\n" +
+                "    }\n" +
+                "    default void sendMessageDelayed(final int group, final int what, final Object data, int delayMsec) {\n" +
+                "        if(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n" +
+                "            new Handler(Looper.getMainLooper()).postDelayed(() -> MessageBus.getInstance().handle(group, what, data), delayMsec);\n" +
+                "        } else {\n" +
+                "            new Handler(Looper.myLooper()).postDelayed(() -> MessageBus.getInstance().handle(group, what, data), delayMsec);\n" +
+                "        }\n" +
+                "    }\n" +
+                "    default void blockGroup(int group) {\n"+
+                "        MessageBus.getInstance().blockGroup(group);\n"+
+                "    }\n"+
+                "    default void blockGroup(int group, long duration) {\n"+
+                "        MessageBus.getInstance().blockGroup(group, duration);\n"+
+                "    }\n"+
+                "    default void unblockGroup(int group) {\n" +
+                "        MessageBus.getInstance().unblockGroup(group);\n"+
+                "    }\n"+
+                "}";
+
+        try { // write the file
+            JavaFileObject source = processingEnv.getFiler().createSourceFile("kr.sdusb.libs.messagebus.IMessageBusModel");
+
+            Writer writer = source.openWriter();
+            writer.write(interfaceString);
+            writer.flush();
+            writer.close();
+        } catch (IOException e) {
+            // Note: calling e.printStackTrace() will print IO errors
+            // that occur from the file already existing after its first run, this is normal
+        }
+    }
+
 
 //    private void writeMessageBoard() {
 //        try{
@@ -287,13 +373,13 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         sb.append(
                 "\tpublic static final int GLOBAL_GROUP = 0;\n" +
-                "\tprivate static MessageBus INSTANCE = null;\n" +
-                "\tpublic static MessageBus getInstance() {\n" +
-                "\t\tif(INSTANCE == null) {\n" +
-                "\t\t\tINSTANCE = new MessageBus();\n" +
-                "\t\t}\n" +
-                "\t\treturn INSTANCE;" +
-                "\t}\n");
+                        "\tprivate static MessageBus INSTANCE = null;\n" +
+                        "\tpublic static MessageBus getInstance() {\n" +
+                        "\t\tif(INSTANCE == null) {\n" +
+                        "\t\t\tINSTANCE = new MessageBus();\n" +
+                        "\t\t}\n" +
+                        "\t\treturn INSTANCE;" +
+                        "\t}\n");
 
         return sb.toString();
     }
@@ -312,7 +398,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         System.out.println("[MessageBus] Writing Imports");
         StringBuilder sb = new StringBuilder();
 
+
         sb.append("import android.os.Handler;\nimport android.os.Looper;\nimport java.lang.Thread;\nimport java.lang.Runnable;\nimport java.util.ArrayList;\nimport java.util.List;\n");
+        sb.append("import java.util.Map;\n");
+        sb.append("import java.util.HashMap;\n");
         for(ClassInfo ci:classInfos) {
             if(ci.classNameWithPackage != null) {
                 sb.append("import ").append(ci.classNameWithPackage).append(";\n");
@@ -334,6 +423,66 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 sb.append("\tprivate ").append(ci.className).append(" ").append(ci.className.toLowerCase()).append(";\n");
             }
         }
+
+        return sb.toString();
+    }
+
+    private String getGroupMessageIgnoreDurationString() {
+        System.out.println("[MessageBus] Writing setMesssageIgnoreDuration() Method");
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\tprivate Map<Integer, Long> msgIgnoreDurationMap = new HashMap<>();\n");
+        sb.append("\tpublic void setIgnoreDuration(int group, long duration) {\n");
+        sb.append("\t\tsynchronized (msgIgnoreDurationMap) {\n");
+        sb.append("\t\t\tmsgIgnoreDurationMap.remove((Integer)group);\n");
+        sb.append("\t\t\tmsgIgnoreDurationMap.put(group, duration);\n");
+        sb.append("\t\t}\n");
+        sb.append("\t}\n\n");
+
+        return sb.toString();
+    }
+
+    private String getGroupBlockString() {
+        System.out.println("[MessageBus] Writing blockGroup() Method");
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\tprivate List<Integer> blockedGroups = new ArrayList<>();\n");
+        sb.append("\tpublic void blockGroup(int group) {\n");
+        sb.append("\t\tsynchronized (blockedGroups) {\n");
+        sb.append("\t\t\tif ( !blockedGroups.contains(group) ) {\n");
+        sb.append("\t\t\t\tblockedGroups.add(group);\n");
+        sb.append("\t\t\t}\n");
+        sb.append("\t\t}\n");
+        sb.append("\t}\n\n");
+
+        return sb.toString();
+    }
+
+    private String getGroupBlockWithDurationString() {
+        System.out.println("[MessageBus] Writing blockGroupWithDuration() Method");
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\tpublic void blockGroup(final int group, long duration) {\n");
+        sb.append("\t\tsynchronized (blockedGroups) {\n");
+        sb.append("\t\t\tif ( !blockedGroups.contains(group) ) {\n");
+        sb.append("\t\t\t\tblockedGroups.add(group);\n");
+        sb.append("\t\t\t}\n");
+        sb.append("\t\t\thandler.postDelayed( new Runnable() { public void run() {unblockGroup(group);} }, duration);\n");
+        sb.append("\t\t}\n");
+        sb.append("\t}\n\n");
+
+        return sb.toString();
+    }
+
+    private String getGroupUnblockString() {
+        System.out.println("[MessageBus] Writing unblockGroup() Method");
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\tpublic void unblockGroup(int group) {\n");
+        sb.append("\t\tsynchronized (blockedGroups) {\n");
+        sb.append("\t\t\tblockedGroups.remove((Integer)group);\n");
+        sb.append("\t\t}\n");
+        sb.append("\t}\n\n");
 
         return sb.toString();
     }
@@ -405,8 +554,27 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         for(int group:map.keySet()) {
             HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
 
-            sb.append(      "   private void handle_"+group+"(int what, Object data) {\n")
-              .append(      "       switch(what) {\n");
+            sb.append(      "   private void handle_"+group+"(int what, Object data) {\n");
+            sb.append(      "       synchronized (blockedGroups) {\n");
+            sb.append(      "          if( blockedGroups.contains(" + group +") ){\n");
+            sb.append(      "               return;\n");
+            sb.append(      "          }\n");
+            sb.append(      "       }\n");
+
+            sb.append(      "       synchronized (msgIgnoreDurationMap) {\n");
+            sb.append(      "          Long duration = msgIgnoreDurationMap.get("+group+");\n");
+            sb.append(      "          if( duration != null ) {\n");
+            sb.append(      "             synchronized (blockedGroups) {\n");
+            sb.append(      "                if( blockedGroups.contains(" + group +") ){\n");
+            sb.append(      "                   return;\n");
+            sb.append(      "                } else {\n");
+            sb.append(      "                   blockGroup(" + group + ", duration);");
+            sb.append(      "                }\n");
+            sb.append(      "             }\n");
+            sb.append(      "          }\n");
+            sb.append(      "       }\n");
+
+            sb.append(      "       switch(what) {\n");
             for (int event : map.keySet()) {
                 sb.append(  "           case ").append(event).append(":\n");
                 List<MethodInfo> infoList = map.get(event);
@@ -734,7 +902,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private class MethodInfo implements Comparable<MethodInfo>{
-        public int priority = Integer.MAX_VALUE;
+        public int priority = Integer.MAX_VALUE/2;
         public final ClassInfo classInfo;
         public final String methodName;
         public final String paramClassNameWithPackage;

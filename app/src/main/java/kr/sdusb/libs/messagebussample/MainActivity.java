@@ -1,7 +1,11 @@
 package kr.sdusb.libs.messagebussample;
 
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import kr.sdusb.libs.messagebus.MessageBus;
@@ -10,11 +14,34 @@ import kr.sdusb.libs.messagebus.ThreadType;
 
 public class MainActivity extends AppCompatActivity {
 
+    public static final int GROUP_MAIN = 10;
+    public static final int TEST_MESSSAGE_FOR_BLOCK = 10;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         MessageBus.getInstance().register(this);
         setContentView(R.layout.activity_main);
+
+        MessageBus.getInstance().setIgnoreDuration(GROUP_MAIN, 300);
+
+        Message msg = new Message();
+        msg.what = 0;
+        msg.arg1 = 0;
+        new Handler(Looper.getMainLooper()) {
+            @Override
+            public void handleMessage(Message msg) {
+                MessageBus.getInstance().handle(GROUP_MAIN, TEST_MESSSAGE_FOR_BLOCK, msg.arg1);
+                if(msg.arg1 < 100) {
+                    sendMessageDelayed(obtainMessage(0, msg.arg1+1, 0), 20);
+                }
+            }
+        }.sendMessage( msg );
+    }
+
+    @Subscribe(events={ TEST_MESSSAGE_FOR_BLOCK }, groups = GROUP_MAIN)
+    public void groupBlockTest(int count) {
+        Log.d("MainActivity", "groupBlockTest: " + count);
     }
 
     @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, thread = ThreadType.CURRENT)
