@@ -23,7 +23,7 @@ public class MainActivity extends AppCompatActivity {
         MessageBus.getInstance().register(this);
         setContentView(R.layout.activity_main);
 
-        MessageBus.getInstance().setIgnoreDuration(GROUP_MAIN, 300);
+        MessageBus.getInstance().takeFirstOnlyWithDuration(GROUP_MAIN, 300);
 
         Message msg = new Message();
         msg.what = 0;

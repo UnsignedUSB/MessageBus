@@ -428,11 +428,11 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getGroupMessageIgnoreDurationString() {
-        System.out.println("[MessageBus] Writing setMesssageIgnoreDuration() Method");
+        System.out.println("[MessageBus] Writing takeFirstOnlyWithDuration() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tprivate Map<Integer, Long> msgIgnoreDurationMap = new HashMap<>();\n");
-        sb.append("\tpublic void setIgnoreDuration(int group, long duration) {\n");
+        sb.append("\tpublic void takeFirstOnlyWithDuration(int group, long duration) {\n");
         sb.append("\t\tsynchronized (msgIgnoreDurationMap) {\n");
         sb.append("\t\t\tmsgIgnoreDurationMap.remove((Integer)group);\n");
         sb.append("\t\t\tmsgIgnoreDurationMap.put(group, duration);\n");
@@ -851,7 +851,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
 
-    private class ClassInfo {
+    private class ClassInfo implements Comparable<ClassInfo>{
         public final String classNameWithPackage;
         public final String className;
         public final List<String> superClasses;
@@ -899,6 +899,13 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             return false;
         }
 
+        @Override
+        public int compareTo(ClassInfo classInfo) {
+            try {
+                return classNameWithPackage.compareTo(classInfo.classNameWithPackage);
+            }catch (Exception e) {}
+            return 0;
+        }
     }
 
     private class MethodInfo implements Comparable<MethodInfo>{
@@ -940,7 +947,23 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         @Override
         public int compareTo(MethodInfo methodInfo) {
-            return priority - methodInfo.priority;
+            int value = priority - methodInfo.priority;
+            if(value != 0) {
+                return value;
+            }
+
+            try {
+                value = classInfo.compareTo(methodInfo.classInfo);
+                if(value != 0) {
+                    return value;
+                }
+            }catch (Exception e){}
+
+            try{
+                return methodName.compareTo(methodInfo.methodName);
+            }catch (Exception e){}
+
+            return 0;
         }
     }
 }
