@@ -38,8 +38,6 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
     private List<String> methodDirectMessageNames = new ArrayList<>();
     private List<String> methodDirectMessageStrings = new ArrayList<>();
-    private int METHOD_DIRECT_CALLER_GROUP = 1;
-    private int METHOD_DIRECT_CALLER_MESSAGE = 0;
 
     @Override
     public boolean process(Set<? extends TypeElement> set, RoundEnvironment roundEnv) {
@@ -240,6 +238,17 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         return methodElement.getParameters() != null && methodElement.getParameters().size() >= (withEventType ? 2 :1);
     }
 
+    private int findNextEmptyInteger(ArrayList<Integer> eventList, int start) {
+        Collections.sort(eventList);
+
+        int returnCode = start;
+        while( eventList.contains(returnCode) ) {
+            returnCode++;
+        }
+
+        return returnCode;
+    }
+
     private void setClassInfosAndMethodInfos(RoundEnvironment roundEnv) throws Exception{
         for (Element element : roundEnv.getElementsAnnotatedWith(ListSubscriber.class)) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] (ListSubscriber) = " + element);
@@ -247,7 +256,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         }
 
         //==============================================================
-        ArrayList<Integer> groupList = new ArrayList<>();
+        ArrayList<Integer> eventList = new ArrayList<>();
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] (Subscribe) = " + element);
 
@@ -255,18 +264,18 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
             // Get Values of Subscribe
             int[] groups = annotation.groups();
+            int[] events = annotation.events();
             for(int group: groups) {
-                groupList.add(group);
+                if(group == 0) {
+                    for(int event: events) {
+                        eventList.add(event);
+                    }
+                    break;
+                }
             }
         }
 
-        METHOD_DIRECT_CALLER_GROUP = 1;
-        while(groupList.contains(METHOD_DIRECT_CALLER_GROUP)) {
-            METHOD_DIRECT_CALLER_GROUP++;
-        }
-        METHOD_DIRECT_CALLER_MESSAGE = 0;
         //==============================================================
-
 
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] (Subscribe) = " + element);
@@ -295,7 +304,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             }
 
             if(events == null || (events.length == 1 && events[0] == 0 && groups.length == 1 && groups[0] == 0) ) {
-                events = new int[]{METHOD_DIRECT_CALLER_MESSAGE};
+                int eventCode = findNextEmptyInteger(eventList, 0);
+                eventList.add(eventCode);
+                events = new int[]{eventCode};
 
                 String name = className.toUpperCase().trim() + "_" + methodName.toUpperCase();
 
@@ -314,10 +325,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 }
 
                 methodDirectMessageNames.add(name);
-                methodDirectMessageStrings.add( "public static final int MESSAGEWHAT_" + name + " = " + METHOD_DIRECT_CALLER_MESSAGE +";"  );
-                METHOD_DIRECT_CALLER_MESSAGE++;
-
-                groups = new int[]{METHOD_DIRECT_CALLER_GROUP};
+                methodDirectMessageStrings.add( "public static final int MESSAGEWHAT_" + name + " = " + eventCode +";"  );
             }
 
             // Get SuperClasses
@@ -330,7 +338,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 if(startIndex > 0 && endIndex > 0) {
                     superClassNameWithPackage = superClassNameWithPackage.substring(0, startIndex);
                 }
-
+    
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] SuperClass " + superClassNameWithPackage);
                 superClasses.add(superClassNameWithPackage);
                 classElement = ((TypeElement)((DeclaredType)mirror).asElement());
@@ -446,11 +454,9 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getNewMessagesString() {
-        StringBuilder sb = new StringBuilder();
+        if( methodDirectMessageStrings.size() == 0 ) return "";
 
-        sb.append("\tpublic static final int GROUP_METHOD_DIRECT = ")
-                .append(METHOD_DIRECT_CALLER_GROUP)
-                .append(";\n");
+        StringBuilder sb = new StringBuilder();
 
         if( methodDirectMessageStrings.size() > 0 ) {
             for (String messageString : methodDirectMessageStrings) {
