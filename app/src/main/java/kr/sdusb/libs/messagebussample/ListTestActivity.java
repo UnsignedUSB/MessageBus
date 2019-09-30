@@ -18,8 +18,16 @@ public class ListTestActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
     }
 
-    @Subscribe(events = {123123}, groups = {0, 1}, thread = ThreadType.CURRENT)
+    @Subscribe
     public void testCurrentThread() {
+
+    }
+    @Subscribe
+    public void testCurrentThread(int a) {
+
+    }
+    @Subscribe
+    public void testCurrentThread(String b) {
 
     }
     @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, thread = ThreadType.MAIN)
@@ -48,7 +56,7 @@ public class ListTestActivity extends AppCompatActivity {
 
 
 
-    @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, thread = ThreadType.CURRENT, withEventType=true)
+    @Subscribe(events = {SampleFragment1.MESSAGE_TEXT_NEW_THREAD}, groups = 1, thread = ThreadType.CURRENT, withEventType=true)
     public void testCurrentThread_withEventType(int what) {
 
     }

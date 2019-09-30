@@ -2,6 +2,8 @@ package kr.sdusb.libs.messagebus;
 
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -23,14 +25,21 @@ import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
 @SupportedAnnotationTypes({"kr.sdusb.libs.messagebus.ListSubscriber", "kr.sdusb.libs.messagebus.Subscribe"})
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public class SubscribeAnnotationProcessor extends AbstractProcessor{
-    private List<ClassInfo> classInfos = new ArrayList<ClassInfo>();
+    private List<String> superClassList = new ArrayList<>();
+    private List<ClassInfo> classInfos = new ArrayList<>();
     private Set<String> listSubscribers = new HashSet<>();
-    private HashMap<Integer, HashMap<Integer, List<MethodInfo>>> map = new HashMap<Integer, HashMap<Integer, List<MethodInfo>>>();
+    private HashMap<Integer, HashMap<Integer, List<MethodInfo>>> map = new HashMap<>();
+
+    private List<String> methodDirectMessageNames = new ArrayList<>();
+    private List<String> methodDirectMessageStrings = new ArrayList<>();
+    private int METHOD_DIRECT_CALLER_GROUP = 1;
+    private int METHOD_DIRECT_CALLER_MESSAGE = 0;
 
     @Override
     public boolean process(Set<? extends TypeElement> set, RoundEnvironment roundEnv) {
@@ -40,7 +49,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         }
         Collection<? extends Element> annotatedElements1 = roundEnv.getElementsAnnotatedWith(ListSubscriber.class);
         Collection<? extends Element> annotatedElements2 = roundEnv.getElementsAnnotatedWith(Subscribe.class);
-        System.out.println("[MessageBus] Check Annotated Classes List Size = " + (annotatedElements1.size() + annotatedElements2.size()));
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Check Annotated Classes List Size = " + (annotatedElements1.size() + annotatedElements2.size()));
 
         if(annotatedElements1.size() + annotatedElements2.size() == 0) {
             writeDefaultClass();
@@ -49,14 +58,15 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         long startTime = System.currentTimeMillis();
 
-        System.out.println("###########################################");
-        System.out.println("##            MessageBus Build           ##");
-        System.out.println("###########################################");
-        System.out.println("[MessageBus] Start Process : " + roundEnv);
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "###########################################");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "##            MessageBus Build           ##");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "###########################################");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Start Process : " + roundEnv);
         try{
             setClassInfosAndMethodInfos(roundEnv);
         }catch (Exception e) {
             e.printStackTrace();
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "setClassInfosAndMethodInfos [Exception] : " + e);
             return false;
         }
 
@@ -64,6 +74,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 .append("package kr.sdusb.libs.messagebus;\n\n")
                 .append( getImportStrings() ).append("\n")   // import
                 .append("public class MessageBus {\n\n")   // open class
+                .append( getNewMessagesString() )
                 .append( getSingleTonString() )
                 .append( getConstructorString() )
                 .append( getVariablesString() ).append("\n")
@@ -85,6 +96,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             writer.flush();
             writer.close();
         } catch (IOException e) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "processingEnv.getFiler().createSourceFile [Exception] : " + e);
             // Note: calling e.printStackTrace() will print IO errors
             // that occur from the file already existing after its first run, this is normal
         }
@@ -95,8 +107,8 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
         int sec = (int) (duration / 1000);
         int msec = (int) (duration % 1000);
-        System.out.println("[MessageBus] Finish Process : " + sec +"." + msec +"s");
-        System.out.println("###########################################");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Finish Process : " + sec +"." + msec +"s");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "###########################################");
         return true;
     }
 
@@ -114,58 +126,64 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             writer.flush();
             writer.close();
         } catch (IOException e) {
+            // processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "[MessageBus] writeDefaultClass() [Exception] : " + e + " // " + getStackTrace(e));
             // Note: calling e.printStackTrace() will print IO errors
             // that occur from the file already existing after its first run, this is normal
         }
 
-        System.out.println("###########################################");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "###########################################");
     }
+
+    public static String getStackTrace(Throwable t) {
+        StringWriter sw = new StringWriter(); t.printStackTrace(new PrintWriter(sw)); return sw.toString();
+    }
+
 
     private void writeMessageBusInterface() {
         String interfaceString =
                 "package kr.sdusb.libs.messagebus;\n\n"+
-                "import android.os.Looper;\n" +
-                "import android.os.Handler;\n"+
-                "import kr.sdusb.libs.messagebus.MessageBus;\n\n" +
-                "public interface IMessageBusModel {\n" +
-                "    default void sendEmptyMessage(int what) {\n" +
-                "        sendMessage(MessageBus.GLOBAL_GROUP, what, null);\n" +
-                "    }\n" +
-                "    default void sendEmptyMessageDelayed(final int what, int delayMsec) {\n" +
-                "        sendMessageDelayed(MessageBus.GLOBAL_GROUP, what, null, delayMsec);\n" +
-                "    }\n" +
-                "    default void sendMessage(int what, Object data) {\n" +
-                "        sendMessage(MessageBus.GLOBAL_GROUP , what, data);\n" +
-                "    }\n" +
-                "    default void sendMessageDelayed(final int what, final Object data, int delayMsec) {\n" +
-                "        sendMessageDelayed(MessageBus.GLOBAL_GROUP, what, data, delayMsec);\n" +
-                "    }\n" +
-                "    default void sendEmptyMessage(int group, int what) {\n" +
-                "        sendMessage(group, what, null);\n" +
-                "    }\n" +
-                "    default void sendEmptyMessageDelayed(final int group, final int what, int delayMsec) {\n" +
-                "        sendMessageDelayed(group, what, null, delayMsec);\n" +
-                "    }\n" +
-                "    default void sendMessage(int group, int what, Object data) {\n" +
-                "        MessageBus.getInstance().handle(group, what, data);\n" +
-                "    }\n" +
-                "    default void sendMessageDelayed(final int group, final int what, final Object data, int delayMsec) {\n" +
-                "        if(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n" +
-                "            new Handler(Looper.getMainLooper()).postDelayed(() -> MessageBus.getInstance().handle(group, what, data), delayMsec);\n" +
-                "        } else {\n" +
-                "            new Handler(Looper.myLooper()).postDelayed(() -> MessageBus.getInstance().handle(group, what, data), delayMsec);\n" +
-                "        }\n" +
-                "    }\n" +
-                "    default void blockGroup(int group) {\n"+
-                "        MessageBus.getInstance().blockGroup(group);\n"+
-                "    }\n"+
-                "    default void blockGroup(int group, long duration) {\n"+
-                "        MessageBus.getInstance().blockGroup(group, duration);\n"+
-                "    }\n"+
-                "    default void unblockGroup(int group) {\n" +
-                "        MessageBus.getInstance().unblockGroup(group);\n"+
-                "    }\n"+
-                "}";
+                        "import android.os.Looper;\n" +
+                        "import android.os.Handler;\n"+
+                        "import kr.sdusb.libs.messagebus.MessageBus;\n\n" +
+                        "public interface IMessageBusModel {\n" +
+                        "    default void sendEmptyMessage(int what) {\n" +
+                        "        sendMessage(MessageBus.GLOBAL_GROUP, what, null);\n" +
+                        "    }\n" +
+                        "    default void sendEmptyMessageDelayed(final int what, int delayMsec) {\n" +
+                        "        sendMessageDelayed(MessageBus.GLOBAL_GROUP, what, null, delayMsec);\n" +
+                        "    }\n" +
+                        "    default void sendMessage(int what, Object data) {\n" +
+                        "        sendMessage(MessageBus.GLOBAL_GROUP , what, data);\n" +
+                        "    }\n" +
+                        "    default void sendMessageDelayed(final int what, final Object data, int delayMsec) {\n" +
+                        "        sendMessageDelayed(MessageBus.GLOBAL_GROUP, what, data, delayMsec);\n" +
+                        "    }\n" +
+                        "    default void sendEmptyMessage(int group, int what) {\n" +
+                        "        sendMessage(group, what, null);\n" +
+                        "    }\n" +
+                        "    default void sendEmptyMessageDelayed(final int group, final int what, int delayMsec) {\n" +
+                        "        sendMessageDelayed(group, what, null, delayMsec);\n" +
+                        "    }\n" +
+                        "    default void sendMessage(int group, int what, Object data) {\n" +
+                        "        MessageBus.getInstance().handle(group, what, data);\n" +
+                        "    }\n" +
+                        "    default void sendMessageDelayed(final int group, final int what, final Object data, int delayMsec) {\n" +
+                        "        if(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n" +
+                        "            new Handler(Looper.getMainLooper()).postDelayed(() -> MessageBus.getInstance().handle(group, what, data), delayMsec);\n" +
+                        "        } else {\n" +
+                        "            new Handler(Looper.myLooper()).postDelayed(() -> MessageBus.getInstance().handle(group, what, data), delayMsec);\n" +
+                        "        }\n" +
+                        "    }\n" +
+                        "    default void blockGroup(int group) {\n"+
+                        "        MessageBus.getInstance().blockGroup(group);\n"+
+                        "    }\n"+
+                        "    default void blockGroup(int group, long duration) {\n"+
+                        "        MessageBus.getInstance().blockGroup(group, duration);\n"+
+                        "    }\n"+
+                        "    default void unblockGroup(int group) {\n" +
+                        "        MessageBus.getInstance().unblockGroup(group);\n"+
+                        "    }\n"+
+                        "}";
 
         try { // write the file
             JavaFileObject source = processingEnv.getFiler().createSourceFile("kr.sdusb.libs.messagebus.IMessageBusModel");
@@ -224,13 +242,34 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
     private void setClassInfosAndMethodInfos(RoundEnvironment roundEnv) throws Exception{
         for (Element element : roundEnv.getElementsAnnotatedWith(ListSubscriber.class)) {
-            System.out.println("[MessageBus] (ListSubscriber) = " + element);
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] (ListSubscriber) = " + element);
             listSubscribers.add(element.toString());
         }
 
+        //==============================================================
+        ArrayList<Integer> groupList = new ArrayList<>();
+        for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] (Subscribe) = " + element);
+
+            Subscribe annotation = element.getAnnotation(Subscribe.class);
+
+            // Get Values of Subscribe
+            int[] groups = annotation.groups();
+            for(int group: groups) {
+                groupList.add(group);
+            }
+        }
+
+        METHOD_DIRECT_CALLER_GROUP = 1;
+        while(groupList.contains(METHOD_DIRECT_CALLER_GROUP)) {
+            METHOD_DIRECT_CALLER_GROUP++;
+        }
+        METHOD_DIRECT_CALLER_MESSAGE = 0;
+        //==============================================================
+
 
         for (Element element : roundEnv.getElementsAnnotatedWith(Subscribe.class)) {
-            System.out.println("[MessageBus] (Subscribe) = " + element);
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] (Subscribe) = " + element);
 
             Subscribe annotation = element.getAnnotation(Subscribe.class);
 
@@ -242,9 +281,10 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             boolean ignoreCastException = annotation.ignoreCastException();
             boolean withEventType = annotation.withEventType();
             boolean hasMessageParam = hasMessageParam(element, withEventType);
-            String methodName = element.getSimpleName().toString();
             TypeElement classElement = (TypeElement) element.getEnclosingElement();
             String classPackageName = classElement.toString();
+            String className = classElement.getSimpleName().toString();
+            String methodName = element.getSimpleName().toString();
             boolean isListSubscriber = false;
 
             // find ListSubscriber
@@ -254,13 +294,48 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 }
             }
 
+            if(events == null || (events.length == 1 && events[0] == 0 && groups.length == 1 && groups[0] == 0) ) {
+                events = new int[]{METHOD_DIRECT_CALLER_MESSAGE};
+
+                String name = className.toUpperCase().trim() + "_" + methodName.toUpperCase();
+
+                if(methodDirectMessageNames.contains(name) && withEventType) {
+                    name = name + "_WITHEVENT";
+                }
+                if(methodDirectMessageNames.contains(name) && hasMessageParam) {
+                    ExecutableElement methodElement = (ExecutableElement) element;
+                    String paramClassNameWithPackage = methodElement.getParameters().get(methodElement.getParameters().size()-1).asType().toString();
+                    String paramClassName = paramClassNameWithPackage.substring( paramClassNameWithPackage.lastIndexOf(".")+1);
+                    name = name + "_" + paramClassName;
+                }
+
+                if(methodDirectMessageNames.contains(name)) {
+                    name = classPackageName.replace(".","_").toUpperCase().replace(className.toUpperCase(),"") + name;
+                }
+
+                methodDirectMessageNames.add(name);
+                methodDirectMessageStrings.add( "public static final int MESSAGEWHAT_" + name + " = " + METHOD_DIRECT_CALLER_MESSAGE +";"  );
+                METHOD_DIRECT_CALLER_MESSAGE++;
+
+                groups = new int[]{METHOD_DIRECT_CALLER_GROUP};
+            }
+
             // Get SuperClasses
-            List<String> superClasses = new ArrayList<String>();
+            List<String> superClasses = new ArrayList<>();
             while( classElement.getSuperclass() != null && !classElement.getSuperclass().toString().equals("java.lang.Object")) {
                 TypeMirror mirror = classElement.getSuperclass();
-                superClasses.add(mirror.toString().trim());
+                String superClassNameWithPackage = mirror.toString().trim();
+                int startIndex = superClassNameWithPackage.lastIndexOf("<");
+                int endIndex = superClassNameWithPackage.lastIndexOf(">");
+                if(startIndex > 0 && endIndex > 0) {
+                    superClassNameWithPackage = superClassNameWithPackage.substring(0, startIndex);
+                }
+
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] SuperClass " + superClassNameWithPackage);
+                superClasses.add(superClassNameWithPackage);
                 classElement = ((TypeElement)((DeclaredType)mirror).asElement());
             }
+            superClassList.addAll(superClasses);
 
 
             // Check Method Type
@@ -279,7 +354,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
             if(methodElement.getParameters() != null) {
-                System.out.println("[MessageBus] methodElement = " + methodElement.getSimpleName() +" // Param Count = " + methodElement.getParameters().size());
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] methodElement = " + methodElement.getSimpleName() +" // Param Count = " + methodElement.getParameters().size());
                 if( methodElement.getParameters().size() == maxParamSize ) {
                     paramClassNameWithPackage = methodElement.getParameters().get(maxParamSize-1).asType().toString();
                 }
@@ -288,7 +363,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             // Check Throwns
             List<String> throwns = null;
             if(methodElement.getThrownTypes() != null && methodElement.getThrownTypes().size() > 0) {
-                throwns = new ArrayList<String>();
+                throwns = new ArrayList<>();
                 for(TypeMirror tm : methodElement.getThrownTypes()) {
                     throwns.add(tm.toString());
                 }
@@ -299,12 +374,14 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
                 MethodInfo methodInfo = new MethodInfo(classPackageName, methodName, paramClassNameWithPackage, hasMessageParam, events, thread, throwns, superClasses, ignoreCastException, withEventType);
                 methodInfo.setPriority(priority);
                 methodInfo.classInfo.isListSubscriber = isListSubscriber;
-                if(classInfos.contains(methodInfo.classInfo) == false) {
+                if( !classInfos.contains(methodInfo.classInfo) ) {
                     classInfos.add(methodInfo.classInfo);
                 }
 
+                if(groups == null || groups.length == 0) {
 
-                for(int group:groups) {
+                }
+                for (int group : groups) {
                     HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
                     if (map == null) {
                         map = new HashMap<>();
@@ -368,6 +445,25 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         }
     }
 
+    private String getNewMessagesString() {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("\tpublic static final int GROUP_METHOD_DIRECT = ")
+                .append(METHOD_DIRECT_CALLER_GROUP)
+                .append(";\n");
+
+        if( methodDirectMessageStrings.size() > 0 ) {
+            for (String messageString : methodDirectMessageStrings) {
+                sb.append("\t")
+                        .append(messageString)
+                        .append("\n");
+            }
+        }
+        sb.append("\n");
+        return sb.toString();
+    }
+
+
     private String getSingleTonString() {
         StringBuilder sb = new StringBuilder();
 
@@ -395,7 +491,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getImportStrings() {
-        System.out.println("[MessageBus] Writing Imports");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing Imports");
         StringBuilder sb = new StringBuilder();
 
 
@@ -412,12 +508,12 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getVariablesString() {
-        System.out.println("[MessageBus] Writing Variables");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing Variables");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tprivate Handler handler;\n");
         for(ClassInfo ci:classInfos) {
-            if(ci.isListSubscriber) {
+            if(ci.isListSubscriber || superClassList.contains(ci.classNameWithPackage)) {
                 sb.append("\tprivate List<").append(ci.className).append("> ").append(ci.className.toLowerCase()).append(" = new ArrayList<>();\n");
             } else {
                 sb.append("\tprivate ").append(ci.className).append(" ").append(ci.className.toLowerCase()).append(";\n");
@@ -428,7 +524,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getGroupMessageIgnoreDurationString() {
-        System.out.println("[MessageBus] Writing takeFirstOnlyWithDuration() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing takeFirstOnlyWithDuration() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tprivate Map<Integer, Long> msgIgnoreDurationMap = new HashMap<>();\n");
@@ -443,7 +539,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getGroupBlockString() {
-        System.out.println("[MessageBus] Writing blockGroup() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing blockGroup() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tprivate List<Integer> blockedGroups = new ArrayList<>();\n");
@@ -459,7 +555,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getGroupBlockWithDurationString() {
-        System.out.println("[MessageBus] Writing blockGroupWithDuration() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing blockGroupWithDuration() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void blockGroup(final int group, long duration) {\n");
@@ -475,7 +571,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getGroupUnblockString() {
-        System.out.println("[MessageBus] Writing unblockGroup() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing unblockGroup() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void unblockGroup(int group) {\n");
@@ -488,11 +584,28 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getRegisterPartString() {
-        System.out.println("[MessageBus] Writing regist() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing regist() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void register(Object model) {\n\t\t");
+        //=========================================
+        // Super Class 처리 구간
+        boolean isSuperClassAdded = false;
         for(ClassInfo ci:classInfos) {
+            if(superClassList.contains(ci.classNameWithPackage)) {
+                isSuperClassAdded = true;
+                sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
+                sb.append("\t\t\t").append(ci.className.toLowerCase()).append(".add((").append(ci.classNameWithPackage).append(")model);\n");
+                sb.append("\t\t}\n\t\t");
+            }
+        }
+        sb.append("\n\t\t");
+
+        //=========================================
+        for(ClassInfo ci:classInfos) {
+            if(superClassList.contains(ci.classNameWithPackage)) {
+                continue;
+            }
             sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
 
             if(ci.isListSubscriber) {
@@ -510,16 +623,36 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getUnregisterPartString() {
-        System.out.println("[MessageBus] Writing unregist() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing unregist() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append("\tpublic void unregister(Object model) {\n\t\t");
+        //=========================================
+        // Super Class 처리 구간
+        boolean isSuperClassAdded = false;
         for(ClassInfo ci:classInfos) {
+            if(superClassList.contains(ci.classNameWithPackage)) {
+                isSuperClassAdded = true;
+                sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
+                sb.append("\t\t\t").append(ci.className.toLowerCase()).append(".remove((").append(ci.classNameWithPackage).append(")model);\n");
+                sb.append("\t\t}\n\t\t");
+            }
+        }
+        sb.append("\n\t\t");
+
+        //=========================================
+
+        for(ClassInfo ci:classInfos) {
+            if(superClassList.contains(ci.classNameWithPackage)) {
+                continue;
+            }
             sb.append("if (model instanceof ").append(ci.classNameWithPackage).append(") {\n");
             if(ci.isListSubscriber) {
                 sb.append("\t\t\t").append(ci.className.toLowerCase()).append(".remove((").append(ci.classNameWithPackage).append(")model);\n");
             } else {
-                sb.append("\t\t\t").append(ci.className.toLowerCase()).append(" = null;\n");
+                sb.append("\t\t\tif(model == ").append(ci.className.toLowerCase()).append(") {\n");
+                sb.append("\t\t\t\t").append(ci.className.toLowerCase()).append(" = null;\n");
+                sb.append("\t\t\t}\n");
             }
             sb.append("\t\t} else ");
         }
@@ -532,7 +665,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getEventHandleMethodString() {
-        System.out.println("[MessageBus] Writing handle() Method");
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing handle() Method");
         StringBuilder sb = new StringBuilder();
 
         sb.append(      "   public void handle(int what, Object data) {\n");
@@ -618,7 +751,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getMethodDefinition_MainThread(MethodInfo methodInfo) {
-        System.out.println("[MessageBus] Writing private Method for MainThread : " + getEventHandlerMethodName(methodInfo, -1, -1));
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing private Method for MainThread : " + getEventHandlerMethodName(methodInfo, -1, -1));
         StringBuilder sb = new StringBuilder();
 
         sb.append("\t\tif(Thread.currentThread() == Looper.getMainLooper().getThread()) {\n");
@@ -629,7 +762,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.isListSubscriber) {
+        if(methodInfo.classInfo.isListSubscriber || superClassList.contains(methodInfo.classInfo.classNameWithPackage)) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -669,7 +802,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.isListSubscriber) {
+        if(methodInfo.classInfo.isListSubscriber || superClassList.contains(methodInfo.classInfo.classNameWithPackage)) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -707,7 +840,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
     }
 
     private String getMethodDefinition_CurrentThread(MethodInfo methodInfo) {
-        System.out.println("[MessageBus] Writing private Method for Current Thread : " + getEventHandlerMethodName(methodInfo, -1, -1));
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing private Method for Current Thread : " + getEventHandlerMethodName(methodInfo, -1, -1));
         StringBuilder sb = new StringBuilder();
 
         String defaultTabs = "\t\t";
@@ -716,7 +849,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.isListSubscriber) {
+        if(methodInfo.classInfo.isListSubscriber || superClassList.contains(methodInfo.classInfo.classNameWithPackage)) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -752,7 +885,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
 
 
     private String getMethodDefinition_NewThread(MethodInfo methodInfo) {
-        System.out.println("[MessageBus] Writing private Method for New Thread : " + getEventHandlerMethodName(methodInfo, -1, -1));
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing private Method for New Thread : " + getEventHandlerMethodName(methodInfo, -1, -1));
         StringBuilder sb = new StringBuilder();
         String defaultTabs;
         sb.append("\t\tnew java.lang.Thread(new Runnable(){\n\t\t\t@Override public void run() {\n");
@@ -763,7 +896,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             defaultTabs += "\t";
         }
 
-        if(methodInfo.classInfo.isListSubscriber) {
+        if(methodInfo.classInfo.isListSubscriber || superClassList.contains(methodInfo.classInfo.classNameWithPackage)) {
             sb.append(defaultTabs).append("for(").append(methodInfo.classInfo.className).append(" classModel:").append(methodInfo.classInfo.className.toLowerCase()).append(") {\n")
                     .append(defaultTabs).append("\tclassModel.").append(methodInfo.methodName)
                     .append("(")
@@ -806,7 +939,7 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
             HashMap<Integer, List<MethodInfo>> map = this.map.get(group);
             for (int event : map.keySet()) {
                 for (MethodInfo methodInfo : map.get(event)) {
-                    System.out.println("[MessageBus] Writing private Method : " + getEventHandlerMethodName(methodInfo, group, event));
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "[MessageBus] Writing private Method : " + getEventHandlerMethodName(methodInfo, group, event));
                     sb.append("\tprivate void ").append(getEventHandlerMethodName(methodInfo, group, event));
                     if (methodInfo.hasMessageParam) {
                         sb.append("(")
@@ -894,7 +1027,8 @@ public class SubscribeAnnotationProcessor extends AbstractProcessor{
         public boolean equals(Object o) {
             if(o instanceof ClassInfo) {
                 ClassInfo ci = (ClassInfo)o;
-                return (ci.classNameWithPackage == null && classNameWithPackage == null && ci.className.equals(className)) || (ci.classNameWithPackage != null && classNameWithPackage != null && ci.classNameWithPackage.equals(classNameWithPackage) );
+                return (ci.classNameWithPackage == null && classNameWithPackage == null && ci.className.equals(className))
+                        || (ci.classNameWithPackage != null && classNameWithPackage != null && ci.classNameWithPackage.equals(classNameWithPackage) );
             }
             return false;
         }
